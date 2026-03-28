@@ -1,0 +1,41 @@
+_subdirectory: template
+_skip_if_exists:
+  - .env
+
+project_name:
+  type: str
+  help: "Project name (e.g. 'My SaaS App')"
+
+project_slug:
+  type: str
+  help: "Project slug in kebab-case (e.g. 'my-saas-app')"
+  default: "{{ project_name | lower | replace(' ', '-') | replace('_', '-') }}"
+
+db_name:
+  type: str
+  help: "Database name"
+  default: "{{ project_slug }}"
+
+python_version:
+  type: str
+  help: "Python version"
+  default: "3.12"
+
+node_version:
+  type: str
+  help: "Node.js version"
+  default: "20"
+
+author_name:
+  type: str
+  help: "Author name"
+
+author_email:
+  type: str
+  help: "Author email"
+
+_tasks:
+  - ["git", "init"]
+  - ["git", "add", "."]
+  - ["pnpm", "install"]
+  - ["pre-commit", "install"]

@@ -1,0 +1,50 @@
+{% raw %}
+set shell := ["bash", "-cu"]
+
+# Development
+dev:
+    docker compose up -d db
+    cd apps/backend && uvicorn app.main:app --reload --port 8000 &
+    cd apps/frontend && pnpm dev
+
+# Build
+build:
+    cd apps/backend && echo "Backend: no build step"
+    cd apps/frontend && pnpm build
+
+# Lint
+lint:
+    cd apps/backend && ruff check . && ruff format --check .
+    cd apps/frontend && pnpm lint
+
+# Format
+format:
+    cd apps/backend && ruff format .
+    cd apps/frontend && pnpm lint --fix
+
+# Test
+test:
+    cd apps/backend && pytest
+    cd apps/frontend && pnpm test
+
+# Generate OpenAPI client types
+generate-client:
+    cd packages/client && pnpm generate
+
+# Database
+db-migrate message:
+    cd apps/backend && alembic revision --autogenerate -m "{{message}}"
+
+db-upgrade:
+    cd apps/backend && alembic upgrade head
+
+db-downgrade:
+    cd apps/backend && alembic downgrade -1
+
+# Reset everything
+reset:
+    docker compose down -v
+    docker compose up -d db
+    sleep 2
+    just db-upgrade
+{% endraw %}

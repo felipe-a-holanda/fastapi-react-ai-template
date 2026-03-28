@@ -1,0 +1,12 @@
+{
+  "name": "{{ project_slug }}-client",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "generate": "openapi-typescript ../contracts/openapi.yaml -o ./src/types.ts"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.0.0",
+    "typescript": "^5.0.0"
+  }
+}
