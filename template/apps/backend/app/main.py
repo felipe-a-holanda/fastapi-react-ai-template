@@ -5,6 +5,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.items import router as items_router
 from app.config import settings
 from app.exceptions import AppException, app_exception_handler
+from app.logging import setup_logging
+
+setup_logging()
 
 app = FastAPI(title=settings.app_name)
 
