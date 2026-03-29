@@ -46,8 +46,20 @@ format:
 
 # Test
 test:
-    cd apps/backend && .venv/bin/pytest
-    cd apps/frontend && pnpm test
+    docker compose up -d db
+    @sleep 2
+    docker compose exec -T db psql -U app -c "CREATE DATABASE app_test;" 2>/dev/null || true
+    cd apps/backend && DATABASE_URL="postgresql+asyncpg://app:app@localhost:54325/app_test" .venv/bin/pytest
+    cd apps/frontend && pnpm test --run
+
+# Test with coverage report
+test-cov:
+    docker compose up -d db
+    @sleep 2
+    docker compose exec -T db psql -U app -c "CREATE DATABASE app_test;" 2>/dev/null || true
+    cd apps/backend && DATABASE_URL="postgresql+asyncpg://app:app@localhost:54325/app_test" .venv/bin/pytest --cov=app --cov-report=term-missing --cov-report=html
+    cd apps/frontend && pnpm test --run
+    @echo "HTML report: apps/backend/htmlcov/index.html"
 
 # Generate OpenAPI client types
 generate-client:
