@@ -46,8 +46,20 @@ See [`WHY.md`](./WHY.md) for the reasoning behind every choice.
 
 ### Scaffold a New Project
 
+**Interactive (Standard):**
+
 ```bash
-copier copy gh:your-github-username/fastapi-react-ai-template ./my-project
+copier copy gh:felipe-a-holanda/fastapi-react-ai-template ./my-project
+```
+
+**Non-interactive / Local (For testing or automated builds):**
+
+```bash
+# Using defaults
+copier copy . ./my-project --defaults --overwrite
+
+# Using a data file for pre-defined answers
+copier copy . ./my-project --data-file my-answers.yml --overwrite
 ```
 
 Copier will ask you a few questions:
