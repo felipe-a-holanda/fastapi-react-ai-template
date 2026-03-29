@@ -1,2 +1,8 @@
 PROMPT*.md
 .remember/
+
+# Generated test projects (should not be committed)
+kyron-finance/
+test-project/
+my-project/
+my-saas-app/

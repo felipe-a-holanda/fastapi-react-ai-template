@@ -3,7 +3,7 @@ import structlog
 from fastapi import HTTPException, status
 
 from app.repositories.item import ItemRepository
-from app.schemas.item import ItemCreate, ItemUpdate, ItemResponse
+from app.schemas.item import ItemCreate, ItemResponse, ItemUpdate
 
 logger = structlog.get_logger()
 

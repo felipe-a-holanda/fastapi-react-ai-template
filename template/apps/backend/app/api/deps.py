@@ -1,5 +1,5 @@
 {% raw %}
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 from fastapi import Cookie, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession

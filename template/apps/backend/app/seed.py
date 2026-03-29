@@ -3,6 +3,7 @@
 Seed the database with an admin user and sample items.
 Run with: just seed
 """
+
 import asyncio
 
 from sqlalchemy import select
@@ -15,16 +16,43 @@ from app.models.user import User
 
 
 SAMPLE_ITEMS = [
-    {"title": "Set up CI/CD pipeline", "description": "Configure GitHub Actions for the project"},
-    {"title": "Write API documentation", "description": "Document all endpoints in OpenAPI spec"},
-    {"title": "Add pagination", "description": "Implement cursor-based pagination for list endpoints"},
-    {"title": "Set up monitoring", "description": "Add health checks and structured logging"},
-    {"title": "Review security headers", "description": "Ensure proper CORS, CSP, and HSTS configuration"},
-    {"title": "Write integration tests", "description": "Cover all CRUD operations with tests"},
-    {"title": "Optimize database queries", "description": "Add indexes and review N+1 queries"},
-    {"title": "Create user onboarding flow", "description": "Build registration and welcome screens"},
+    {
+        "title": "Set up CI/CD pipeline",
+        "description": "Configure GitHub Actions for the project",
+    },
+    {
+        "title": "Write API documentation",
+        "description": "Document all endpoints in OpenAPI spec",
+    },
+    {
+        "title": "Add pagination",
+        "description": "Implement cursor-based pagination for list endpoints",
+    },
+    {
+        "title": "Set up monitoring",
+        "description": "Add health checks and structured logging",
+    },
+    {
+        "title": "Review security headers",
+        "description": "Ensure proper CORS, CSP, and HSTS configuration",
+    },
+    {
+        "title": "Write integration tests",
+        "description": "Cover all CRUD operations with tests",
+    },
+    {
+        "title": "Optimize database queries",
+        "description": "Add indexes and review N+1 queries",
+    },
+    {
+        "title": "Create user onboarding flow",
+        "description": "Build registration and welcome screens",
+    },
     {"title": "Implement search", "description": "Add full-text search for items"},
-    {"title": "Deploy to staging", "description": "Set up staging environment with Docker"},
+    {
+        "title": "Deploy to staging",
+        "description": "Set up staging environment with Docker",
+    },
 ]
 
 

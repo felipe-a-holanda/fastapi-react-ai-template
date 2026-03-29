@@ -23,5 +23,5 @@ class User(Base):
         DateTime(timezone=True), onupdate=func.now(), nullable=True
     )
 
-    items: Mapped[list["Item"]] = relationship("Item", back_populates="owner")
+    items: Mapped[list["Item"]] = relationship("Item", back_populates="owner")  # noqa: F821
 {% endraw %}

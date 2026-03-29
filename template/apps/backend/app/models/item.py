@@ -25,5 +25,5 @@ class Item(Base):
     owner_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("users.id"), index=True, nullable=False
     )
-    owner: Mapped["User"] = relationship("User", back_populates="items")
+    owner: Mapped["User"] = relationship("User", back_populates="items")  # noqa: F821
 {% endraw %}

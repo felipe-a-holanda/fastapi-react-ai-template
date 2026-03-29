@@ -2,7 +2,7 @@
 import structlog
 from fastapi import HTTPException, status
 
-from app.auth import create_access_token, create_refresh_token, hash_password, verify_password
+from app.auth import create_access_token, hash_password, verify_password
 from app.repositories.user import UserRepository
 from app.schemas.user import TokenResponse, UserCreate, UserResponse
 

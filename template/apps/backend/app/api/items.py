@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, status
 
 from app.api.deps import get_current_user, get_item_service
 from app.models.user import User
-from app.schemas.item import ItemCreate, ItemUpdate, ItemResponse
+from app.schemas.item import ItemCreate, ItemResponse, ItemUpdate
 from app.services.item import ItemService
 
 router = APIRouter(prefix="/api/items", tags=["items"])

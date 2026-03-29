@@ -3,7 +3,7 @@ from sqladmin import Admin, ModelView
 from sqladmin.authentication import AuthenticationBackend
 from starlette.requests import Request
 
-from app.auth import hash_password, verify_password
+from app.auth import verify_password
 from app.config import settings
 from app.database import async_session_maker
 from app.models.item import Item
@@ -37,7 +37,14 @@ class AdminAuth(AuthenticationBackend):
 
 
 class UserAdmin(ModelView, model=User):
-    column_list = [User.id, User.email, User.full_name, User.is_active, User.is_superuser, User.created_at]
+    column_list = [
+        User.id,
+        User.email,
+        User.full_name,
+        User.is_active,
+        User.is_superuser,
+        User.created_at,
+    ]
     column_searchable_list = [User.email, User.full_name]
     column_sortable_list = [User.id, User.email, User.created_at]
     can_create = True
