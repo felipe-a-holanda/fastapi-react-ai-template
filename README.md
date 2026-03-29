@@ -226,10 +226,12 @@ Read [`WHY.md`](./WHY.md) for the full design rationale, including a table compa
 
 1. Fork this repo
 2. Make changes inside `template/`
-3. Test with: `copier copy . /tmp/test-project`
+3. Test with: `./test-template.sh` (or `copier copy . /tmp/test-project` for quick manual testing)
 4. Submit a PR
 
 When editing Copier template files, remember to escape literal `{{ }}` braces with `{% raw %}...{% endraw %}` blocks. See [`SPEC.md`](./SPEC.md) for the full template spec and Jinja2 escaping notes.
+
+**Testing:** See [`TESTING.md`](./TESTING.md) for the complete testing strategy, including how to run the automated test suite that validates template generation, dependency installation, linting, migrations, internal tests, and builds.
 
 ---
 
