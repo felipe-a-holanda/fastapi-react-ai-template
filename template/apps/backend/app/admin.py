@@ -5,7 +5,7 @@ from starlette.requests import Request
 
 from app.auth import verify_password
 from app.config import settings
-from app.database import async_session_maker
+from app.database import async_session_maker, engine
 from app.models.item import Item
 from app.models.user import User
 
@@ -75,7 +75,7 @@ def setup_admin(app) -> Admin:
     authentication_backend = AdminAuth(secret_key=settings.secret_key)
     admin = Admin(
         app,
-        async_session_maker,
+        engine,
         authentication_backend=authentication_backend,
         title=f"{settings.app_name} Admin",
     )

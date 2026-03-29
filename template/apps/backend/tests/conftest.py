@@ -1,16 +1,15 @@
 {% raw %}
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.deps import get_session
 from app.auth import hash_password
-from app.database import Base
+from app.database import Base, engine
 from app.main import app
 from app.models.user import User
 
-TEST_DATABASE_URL = "sqlite+aiosqlite:///./test.db"
-engine = create_async_engine(TEST_DATABASE_URL, echo=False)
+# Reuse the app engine (now SQLite via root conftest.py)
 TestSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
@@ -58,6 +57,21 @@ async def test_user(session) -> User:
 
 
 @pytest.fixture
+async def superuser(session) -> User:
+    user = User(
+        email="admin@example.com",
+        hashed_password=hash_password("adminpassword"),
+        full_name="Admin User",
+        is_active=True,
+        is_superuser=True,
+    )
+    session.add(user)
+    await session.commit()
+    await session.refresh(user)
+    return user
+
+
+@pytest.fixture
 async def authenticated_client(client, test_user):
     """Client with auth cookie set."""
     response = await client.post(
@@ -65,6 +79,5 @@ async def authenticated_client(client, test_user):
         json={"email": "test@example.com", "password": "testpassword"},
     )
     assert response.status_code == 200
-    # The cookie is set automatically on the client
     return client
 {% endraw %}
