@@ -1,25 +1,32 @@
 {% raw %}
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from app.api.deps import get_session
 from app.auth import hash_password
-from app.database import Base, engine
+from app.config import settings
+from app.database import Base, engine as app_engine
 from app.main import app
 from app.models.user import User
 
-# Reuse the app engine (now SQLite via root conftest.py)
-TestSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+# NullPool ensures each checkout gets a fresh connection, avoiding asyncpg
+# "another operation is in progress" errors when fixtures share the event loop.
+test_engine = create_async_engine(settings.database_url, poolclass=NullPool)
+TestSessionLocal = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
 
 
 @pytest.fixture(autouse=True)
 async def setup_db():
-    async with engine.begin() as conn:
+    async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield
-    async with engine.begin() as conn:
+    async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
+    # Dispose the app's engine pool so the next test gets fresh connections
+    # in its own event loop (avoids "Future attached to a different loop").
+    await app_engine.dispose()
 
 
 @pytest.fixture
