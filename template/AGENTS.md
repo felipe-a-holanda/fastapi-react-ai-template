@@ -2,6 +2,17 @@
 
 This project is an AI-agent-optimized monorepo. Follow these rules strictly.
 
+## FORGE Protocol (for multi-task features)
+
+For features that span multiple files or require planning, use the **FORGE protocol**:
+1. Create a change directory: `forge/changes/{change-id}/`
+2. Write `spec.md` (requirements), `tasks.md` (atomic tasks), `decisions.md`, `state.json`
+3. Present to human for review, then execute one task at a time
+4. See `forge/FORGE.md` for the full protocol and `forge/CLAUDE.md` for the operating manual
+5. Run with `just forge` (autonomous) or `just forge-status` (dry-run)
+
+For quick single-file fixes, follow the checklist below directly.
+
 ## Architecture
 
 - Monorepo: pnpm workspaces

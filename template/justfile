@@ -92,4 +92,12 @@ reset:
     @echo "==> Seeding database..."
     just seed
     @echo "✓ Database reset complete. Admin user: admin@example.com / admin"
+
+# FORGE: Run autonomous execution loop (requires Claude Code CLI)
+forge *args:
+    python forge/forge_run.py {{args}}
+
+# FORGE: Dry-run — show what the next iteration would do
+forge-status *args:
+    python forge/forge_run.py --dry-run {{args}}
 {% endraw %}
