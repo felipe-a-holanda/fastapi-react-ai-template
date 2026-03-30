@@ -31,3 +31,6 @@ coverage/
 htmlcov/
 .pytest_cache/
 .coverage
+
+# FORGE Obsidian Vault (generated)
+.forge-vault/

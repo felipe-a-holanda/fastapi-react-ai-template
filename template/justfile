@@ -1,4 +1,3 @@
-{% raw %}
 set shell := ["bash", "-cu"]
 
 # First-time setup: install deps, create DB, run migrations, seed data
@@ -140,4 +139,7 @@ forge-status *args:
 # FORGE: Bootstrap empty scaffold (low-level — prefer forge-plan for intelligent planning)
 forge-new change_id *args:
     python forge/forge_new.py {{change_id}} {{args}}
-{% endraw %}
+
+# Generate or update Obsidian vault from FORGE documents
+vault output_path=".forge-vault" *args:
+    python forge/scripts/generate_vault.py --output {{output_path}} {{args}}
