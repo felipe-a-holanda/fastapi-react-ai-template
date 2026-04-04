@@ -25,7 +25,7 @@ class ItemRepository:
     async def create(self, data: ItemCreate, owner_id: int) -> Item:
         item = Item(**data.model_dump(), owner_id=owner_id)
         self.session.add(item)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(item)
         return item
 
@@ -33,11 +33,11 @@ class ItemRepository:
         update_data = data.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(item, field, value)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(item)
         return item
 
     async def delete(self, item: Item) -> None:
         await self.session.delete(item)
-        await self.session.commit()
+        await self.session.flush()
 {% endraw %}

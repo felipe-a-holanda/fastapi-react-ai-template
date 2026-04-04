@@ -1,7 +1,7 @@
 {% raw %}
 import structlog
-from fastapi import HTTPException, status
 
+from app.exceptions import NotFoundError
 from app.repositories.item import ItemRepository
 from app.schemas.item import ItemCreate, ItemResponse, ItemUpdate
 
@@ -21,10 +21,7 @@ class ItemService:
     async def get_item(self, item_id: int, owner_id: int) -> ItemResponse:
         item = await self.repository.get_by_id(item_id, owner_id=owner_id)
         if not item:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Item {item_id} not found",
-            )
+            raise NotFoundError(f"Item {item_id} not found")
         return ItemResponse.model_validate(item)
 
     async def create_item(self, data: ItemCreate, owner_id: int) -> ItemResponse:
@@ -37,10 +34,7 @@ class ItemService:
     ) -> ItemResponse:
         item = await self.repository.get_by_id(item_id, owner_id=owner_id)
         if not item:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Item {item_id} not found",
-            )
+            raise NotFoundError(f"Item {item_id} not found")
         updated = await self.repository.update(item, data)
         logger.info("item_updated", item_id=item.id, owner_id=owner_id)
         return ItemResponse.model_validate(updated)
@@ -48,10 +42,7 @@ class ItemService:
     async def delete_item(self, item_id: int, owner_id: int) -> None:
         item = await self.repository.get_by_id(item_id, owner_id=owner_id)
         if not item:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Item {item_id} not found",
-            )
+            raise NotFoundError(f"Item {item_id} not found")
         await self.repository.delete(item)
         logger.info("item_deleted", item_id=item_id, owner_id=owner_id)
 {% endraw %}

@@ -87,4 +87,37 @@ async def test_delete_item(authenticated_client: AsyncClient):
 async def test_delete_item_not_found(authenticated_client: AsyncClient):
     response = await authenticated_client.delete("/api/items/999")
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_user_isolation(client: AsyncClient):
+    """Items created by user A must not be visible to user B."""
+    # User A
+    await client.post(
+        "/api/auth/register",
+        json={"email": "a@test.com", "password": "testpass123"},
+    )
+    resp_a = await client.post(
+        "/api/auth/login",
+        json={"email": "a@test.com", "password": "testpass123"},
+    )
+    cookies_a = dict(resp_a.cookies)
+    await client.post(
+        "/api/items/", json={"title": "A's item"}, cookies=cookies_a
+    )
+
+    # User B
+    await client.post(
+        "/api/auth/register",
+        json={"email": "b@test.com", "password": "testpass123"},
+    )
+    resp_b = await client.post(
+        "/api/auth/login",
+        json={"email": "b@test.com", "password": "testpass123"},
+    )
+    cookies_b = dict(resp_b.cookies)
+
+    response = await client.get("/api/items/", cookies=cookies_b)
+    assert response.status_code == 200
+    assert len(response.json()) == 0
 {% endraw %}

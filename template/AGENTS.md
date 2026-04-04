@@ -47,14 +47,14 @@ Follow this exact order. Do NOT skip steps.
 3. **Create backend files** (copy from `items` and rename):
    - `app/models/<feature>.py` — SQLAlchemy model
    - `app/schemas/<feature>.py` — Pydantic schemas (Base, Create, Update, Response)
-   - `app/repositories/<feature>.py` — DB access (get_all, get_by_id, create, update, delete)
-   - `app/services/<feature>.py` — Business logic (calls repository, raises HTTPException)
+   - `app/repositories/<feature>.py` — DB access (get_all, get_by_id, create, update, delete). NEVER call `session.commit()` — use `session.flush()` only
+   - `app/services/<feature>.py` — Business logic (calls repository, raises domain exceptions from `app.exceptions`). NEVER import FastAPI
    - `app/api/<feature>.py` — Router (calls service via Depends)
    - Register router in `app/main.py`
 
 4. **Create migration**: `just db-migrate "add <feature> table"`
 
-5. **Add backend dependency wiring** in `app/api/deps.py`
+5. **Add backend dependency wiring** in `app/api/deps.py` and **add contract test** in `tests/test_contract.py`
 
 6. **Create frontend files** (copy from `features/items/` and rename):
    - `src/features/<feature>/api.ts` — TanStack Query hooks
@@ -70,10 +70,40 @@ Follow this exact order. Do NOT skip steps.
 - NEVER define types manually that exist in the generated client
 - NEVER put database logic in routers or services
 - NEVER put business logic in repositories
-- NEVER import FastAPI in services
+- NEVER import FastAPI in services (raise domain exceptions instead)
+- NEVER call `session.commit()` in repositories (use `flush()`)
 - ALWAYS follow the existing patterns in `items/`
 - ALWAYS run `just generate-client` after changing `openapi.yaml`
 - ALWAYS run `just lint` before committing
+
+## Error Handling
+
+Services raise domain exceptions from `app/exceptions.py`:
+- `NotFoundError` -> 404
+- `ConflictError` -> 409
+- `AuthenticationError` -> 401
+- `AuthorizationError` -> 403
+- `ValidationError` -> 422
+
+Routers do NOT catch exceptions. The global handler in `main.py` does the translation.
+
+To add a new domain error: add the class in `exceptions.py` and add the mapping in `EXCEPTION_STATUS_MAP`.
+
+## Cross-Slice Dependencies
+
+When service A needs service B:
+1. Wire it in `app/api/deps.py` — inject B as a dependency of A
+2. Service A receives B via constructor, never imports B's repository
+3. If it's not wired in `deps.py`, the dependency doesn't exist
+
+## When to Introduce Domain Objects
+
+Keep business logic in services until ANY of these triggers:
+- A service method exceeds ~50 lines of conditional logic
+- The same invariant is checked in 3+ places
+- You need to unit-test business rules without touching persistence
+
+Then: create `app/domain/<feature>.py` with pure Python classes (no SQLAlchemy, no Pydantic). The service instantiates domain objects, calls their methods, then persists via repository.
 
 ## Naming Conventions
 

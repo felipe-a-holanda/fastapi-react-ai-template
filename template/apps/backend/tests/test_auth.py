@@ -113,13 +113,11 @@ async def test_logout(authenticated_client: AsyncClient):
 @pytest.mark.asyncio
 async def test_superuser_dep_rejects_regular_user(test_user):
     """get_current_superuser raises 403 for non-superuser."""
-    from fastapi import HTTPException
-
     from app.api.deps import get_current_superuser
+    from app.exceptions import AuthorizationError
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(AuthorizationError):
         await get_current_superuser(current_user=test_user)
-    assert exc_info.value.status_code == 403
 
 
 @pytest.mark.asyncio

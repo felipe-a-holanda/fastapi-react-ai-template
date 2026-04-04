@@ -1,8 +1,14 @@
 {% raw %}
 """Direct unit tests for service and repository layers."""
 import pytest
-from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.exceptions import (
+    AuthenticationError,
+    AuthorizationError,
+    ConflictError,
+    NotFoundError,
+)
 
 from app.auth import hash_password
 from app.models.item import Item
@@ -121,9 +127,8 @@ async def test_auth_service_register_duplicate_raises(session: AsyncSession):
     repo = UserRepository(session)
     service = AuthService(repo)
     await service.register(UserCreate(email="dup@test.com", password="pw"))
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ConflictError):
         await service.register(UserCreate(email="dup@test.com", password="pw"))
-    assert exc_info.value.status_code == 409
 
 
 @pytest.mark.asyncio
@@ -140,9 +145,8 @@ async def test_auth_service_login_wrong_password(session: AsyncSession):
     repo = UserRepository(session)
     service = AuthService(repo)
     await service.register(UserCreate(email="wrong@test.com", password="correct"))
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(AuthenticationError):
         await service.login("wrong@test.com", "incorrect")
-    assert exc_info.value.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -156,9 +160,8 @@ async def test_auth_service_login_inactive_user(session: AsyncSession):
     session.add(user)
     await session.commit()
     service = AuthService(repo)
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(AuthorizationError):
         await service.login("inactive2@test.com", "pw")
-    assert exc_info.value.status_code == 403
 
 
 @pytest.mark.asyncio
@@ -174,9 +177,8 @@ async def test_auth_service_refresh(session: AsyncSession):
 async def test_auth_service_refresh_missing_user(session: AsyncSession):
     repo = UserRepository(session)
     service = AuthService(repo)
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(AuthenticationError):
         await service.refresh(99999)
-    assert exc_info.value.status_code == 401
 
 
 # ---------------------------------------------------------------------------
@@ -216,9 +218,8 @@ async def test_item_service_get_item(session: AsyncSession, test_user: User):
 async def test_item_service_get_item_not_found(session: AsyncSession, test_user: User):
     repo = ItemRepository(session)
     service = ItemService(repo)
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(NotFoundError):
         await service.get_item(99999, owner_id=test_user.id)
-    assert exc_info.value.status_code == 404
 
 
 @pytest.mark.asyncio
@@ -236,9 +237,8 @@ async def test_item_service_update(session: AsyncSession, test_user: User):
 async def test_item_service_update_not_found(session: AsyncSession, test_user: User):
     repo = ItemRepository(session)
     service = ItemService(repo)
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(NotFoundError):
         await service.update_item(99999, ItemUpdate(title="X"), owner_id=test_user.id)
-    assert exc_info.value.status_code == 404
 
 
 @pytest.mark.asyncio
@@ -247,7 +247,7 @@ async def test_item_service_delete(session: AsyncSession, test_user: User):
     service = ItemService(repo)
     created = await service.create_item(ItemCreate(title="Bye"), owner_id=test_user.id)
     await service.delete_item(created.id, owner_id=test_user.id)
-    with pytest.raises(HTTPException):
+    with pytest.raises(NotFoundError):
         await service.get_item(created.id, owner_id=test_user.id)
 
 
@@ -255,7 +255,6 @@ async def test_item_service_delete(session: AsyncSession, test_user: User):
 async def test_item_service_delete_not_found(session: AsyncSession, test_user: User):
     repo = ItemRepository(session)
     service = ItemService(repo)
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(NotFoundError):
         await service.delete_item(99999, owner_id=test_user.id)
-    assert exc_info.value.status_code == 404
 {% endraw %}

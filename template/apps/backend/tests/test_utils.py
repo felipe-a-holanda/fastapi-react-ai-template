@@ -15,7 +15,7 @@ from app.auth import (
     verify_password,
 )
 from app.config import settings
-from app.exceptions import AppError, app_exception_handler
+from app.exceptions import AppError, NotFoundError, ValidationError, app_exception_handler
 
 
 # --- Password hashing ---
@@ -80,17 +80,26 @@ def test_decode_valid_token_returns_payload():
 
 
 def test_app_error_stores_attributes():
-    err = AppError(status_code=404, detail="Not found")
-    assert err.status_code == 404
+    err = NotFoundError(detail="Not found")
     assert err.detail == "Not found"
 
 
 @pytest.mark.asyncio
 async def test_app_exception_handler_returns_json_response():
     mock_request = MagicMock()
-    err = AppError(status_code=422, detail="Invalid input")
+    err = ValidationError("Invalid input")
     response = await app_exception_handler(mock_request, err)
     assert response.status_code == 422
     body = json.loads(response.body)
     assert body["detail"] == "Invalid input"
+
+
+@pytest.mark.asyncio
+async def test_app_exception_handler_not_found():
+    mock_request = MagicMock()
+    err = NotFoundError("Item not found")
+    response = await app_exception_handler(mock_request, err)
+    assert response.status_code == 404
+    body = json.loads(response.body)
+    assert body["detail"] == "Item not found"
 {% endraw %}

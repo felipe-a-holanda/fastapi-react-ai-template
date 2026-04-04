@@ -7,10 +7,11 @@ after await points in coroutines. These tests call route handlers and dependency
 functions directly so coverage is captured accurately.
 """
 import pytest
-from fastapi import HTTPException, Response
+from fastapi import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
+from app.exceptions import AuthenticationError
 from app.api.health import health_check
 from app.auth import create_access_token, hash_password
 from app.models.user import User
@@ -76,9 +77,8 @@ async def test_login_route_direct(session: AsyncSession):
 async def test_get_current_user_unknown_user(session: AsyncSession):
     """Token is valid but the user no longer exists → 401."""
     token = create_access_token(user_id=99999)
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(AuthenticationError):
         await get_current_user(session=session, access_token=token)
-    assert exc_info.value.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -94,9 +94,8 @@ async def test_get_current_user_inactive_user(session: AsyncSession):
     await session.refresh(inactive)
 
     token = create_access_token(user_id=inactive.id)
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(AuthenticationError):
         await get_current_user(session=session, access_token=token)
-    assert exc_info.value.status_code == 401
 
 
 @pytest.mark.asyncio
