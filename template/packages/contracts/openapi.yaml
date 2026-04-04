@@ -76,6 +76,27 @@ paths:
                   detail:
                     type: string
 
+  /api/auth/refresh:
+    post:
+      operationId: refreshToken
+      summary: Refresh access token (requires valid current token)
+      tags: [auth]
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: New access token set in cookie
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/auth/me:
     get:
       operationId: getMe

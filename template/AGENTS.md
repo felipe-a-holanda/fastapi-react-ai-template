@@ -68,6 +68,7 @@ Follow this exact order. Do NOT skip steps.
 
 - NEVER use `fetch()` directly in React components
 - NEVER define types manually that exist in the generated client
+  - **Exception**: `features/auth/api.ts` defines `User`, `LoginData`, `RegisterData` inline — auth is a bootstrap module needed before `just generate-client` can run. Do not remove these; do not replicate this pattern elsewhere.
 - NEVER put database logic in routers or services
 - NEVER put business logic in repositories
 - NEVER import FastAPI in services (raise domain exceptions instead)

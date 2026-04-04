@@ -50,6 +50,17 @@ async def logout(response: Response):
     return {"detail": "Logged out"}
 
 
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh(
+    response: Response,
+    current_user: User = Depends(get_current_user),
+    service: AuthService = Depends(get_auth_service),
+):
+    tokens = await service.refresh(current_user.id)
+    _set_token_cookie(response, tokens.access_token)
+    return tokens
+
+
 @router.get("/me", response_model=UserResponse)
 async def get_me(current_user: User = Depends(get_current_user)):
     return UserResponse.model_validate(current_user)
