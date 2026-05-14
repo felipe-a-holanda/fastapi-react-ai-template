@@ -6,3 +6,6 @@ kyron-finance/
 test-project/
 my-project/
 my-saas-app/
+
+# FORGE per-run logs
+forge/logs/

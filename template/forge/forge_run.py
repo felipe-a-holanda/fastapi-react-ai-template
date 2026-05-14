@@ -17,6 +17,7 @@ import os
 import re
 import subprocess
 import sys
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,7 +26,11 @@ from pathlib import Path
 
 FORGE_DIR = Path("forge")
 CHANGES_DIR = FORGE_DIR / "changes"
+LOGS_DIR = FORGE_DIR / "logs"
 CLAUDE_CMD = "claude"
+
+RATE_LIMIT_NEEDLE = "you've hit your limit"
+HEARTBEAT_INTERVAL = 30  # seconds between "still running…" pings
 
 PROMPT = (
     "Read CLAUDE.md and AGENTS.md. Execute the next pending task for the active change. "
@@ -102,31 +107,100 @@ def next_task_name(change_dir: Path) -> str:
 # ── Execution ────────────────────────────────────────────────────────────────
 
 
-def run_claude(timeout: int) -> tuple[int, float]:
-    """Run Claude Code with the FORGE prompt. Returns (exit_code, elapsed_seconds)."""
+def run_claude(timeout: int, log_path: Path) -> tuple[int, float, dict | None, bool]:
+    """Run Claude Code with the FORGE prompt using stream-json.
+
+    Streams assistant text to both terminal and `log_path`. Captures token usage
+    from the final `result` event. Detects rate-limit messages inline.
+
+    Returns (exit_code, elapsed_seconds, usage_dict_or_None, hit_rate_limit).
+    """
     start = time.monotonic()
+    hit_rate_limit = False
+    usage: dict | None = None
 
     try:
-        result = subprocess.run(
+        proc = subprocess.Popen(
             [
                 CLAUDE_CMD,
                 "--dangerously-skip-permissions",
                 "--max-turns", "50",
+                "--output-format", "stream-json",
                 "--verbose",
                 "-p", PROMPT,
             ],
-            timeout=timeout,
-            capture_output=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             stdin=subprocess.DEVNULL,
+            text=True,
+            bufsize=1,
         )
-        elapsed = time.monotonic() - start
-        return result.returncode, elapsed
-    except subprocess.TimeoutExpired:
-        elapsed = time.monotonic() - start
-        return 124, elapsed
     except FileNotFoundError:
         print(f"\n  ✗ '{CLAUDE_CMD}' not found. Is Claude Code installed and in PATH?")
         sys.exit(1)
+
+    stop_event = threading.Event()
+
+    def heartbeat() -> None:
+        while not stop_event.wait(HEARTBEAT_INTERVAL):
+            elapsed = int(time.monotonic() - start)
+            mins, secs = divmod(elapsed, 60)
+            print(
+                f"  ⏳ Claude still running... {mins}m{secs}s elapsed (timeout at {timeout}s)",
+                file=sys.stderr, flush=True,
+            )
+
+    def watchdog() -> None:
+        if not stop_event.wait(timeout):
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
+
+    hb = threading.Thread(target=heartbeat, daemon=True)
+    wd = threading.Thread(target=watchdog, daemon=True)
+    hb.start()
+    wd.start()
+
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(log_path, "a", buffering=1) as log_handle:
+        log_handle.write(f"\n\n=== iteration started {datetime.now().isoformat()} ===\n")
+        try:
+            assert proc.stdout is not None
+            for line in proc.stdout:
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+
+                ev_type = event.get("type")
+                if ev_type == "assistant":
+                    msg = event.get("message") or {}
+                    for block in msg.get("content") or []:
+                        if block.get("type") == "text":
+                            text = block.get("text", "")
+                            sys.stdout.write(text)
+                            sys.stdout.flush()
+                            log_handle.write(text)
+                            if RATE_LIMIT_NEEDLE in text.lower():
+                                hit_rate_limit = True
+                elif ev_type == "result":
+                    u = event.get("usage") or {}
+                    usage = {
+                        "input_tokens": u.get("input_tokens"),
+                        "output_tokens": u.get("output_tokens"),
+                    }
+        finally:
+            stop_event.set()
+            proc.wait()
+
+    elapsed = time.monotonic() - start
+
+    # Watchdog killed it → treat as timeout, regardless of exit code shape
+    if elapsed >= timeout and proc.returncode != 0:
+        return 124, elapsed, usage, hit_rate_limit
+
+    return proc.returncode, elapsed, usage, hit_rate_limit
 
 
 def run_verification() -> tuple[bool, str]:
@@ -207,6 +281,14 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="show what would happen without running")
     args = parser.parse_args()
 
+    # Force the `claude` CLI to authenticate via the OAuth credentials in
+    # ~/.claude/.credentials.json (Max/Pro subscription) instead of pay-per-token.
+    # If ANTHROPIC_API_KEY is exported in the shell, the CLI prefers it and bills
+    # against API credits — not what we want for long autonomous loops.
+    os.environ.pop("ANTHROPIC_API_KEY", None)
+    # Avoid `git` blocking on a pager when the agent runs git commands.
+    os.environ["GIT_PAGER"] = "cat"
+
     print()
     print("🔨 FORGE — autonomous execution")
     print(f"   max iterations : {args.max_iterations}")
@@ -241,6 +323,10 @@ def main():
         print(f"  Next: {next_task_name(change_dir)}")
         sys.exit(0)
 
+    # Persistent log for this run — assistant text only (parsed from stream-json)
+    log_path = LOGS_DIR / f"{change_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+    print(f"   log file       : {log_path}")
+
     # ── Execution loop ───────────────────────────────────────────────────
 
     consecutive_failures = 0
@@ -274,8 +360,18 @@ def main():
         print(f"  🤖 Launching Claude (timeout: {args.timeout}s)...")
 
         # Run Claude
-        exit_code, elapsed = run_claude(args.timeout)
+        exit_code, elapsed, usage, hit_rate_limit = run_claude(args.timeout, log_path)
         print_result(exit_code, elapsed)
+
+        if usage:
+            tin = usage.get("input_tokens")
+            tout = usage.get("output_tokens")
+            print(f"  🔢 tokens_in={tin} tokens_out={tout}")
+
+        if hit_rate_limit:
+            counts = count_tasks(change_dir)
+            print_final(counts, "rate limit hit — stopping (check log for reset time)")
+            sys.exit(2)
 
         # Track consecutive failures
         if exit_code != 0:

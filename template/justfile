@@ -93,9 +93,11 @@ reset:
     @echo "✓ Database reset complete. Admin user: admin@example.com / admin"
 
 # FORGE: Plan a new change — Claude reads architecture + constraints and produces a full spec
-# Usage: just forge-plan add-notifications "Add email notifications for item comments"
-forge-plan change_id description *args:
-    python forge/forge_plan.py {{change_id}} "{{description}}" {{args}}
+# Usage:
+#   just forge-plan <change-id> "<short description>"
+#   just forge-plan <change-id> --from-file <path/to/spec.md>
+forge-plan *args:
+    python forge/forge_plan.py {{args}}
 
 # FORGE: Review the current plan — print spec.md and tasks.md for the active REVIEW change
 forge-review *change_id:

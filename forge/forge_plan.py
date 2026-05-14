@@ -6,8 +6,9 @@ Claude is required to read global architecture, constraints, and verification do
 writing anything. After this command, the change is in REVIEW phase and ready for human approval.
 
 Usage:
-    python forge/forge_plan.py add-notifications "Add email notifications for item comments"
-    python forge/forge_plan.py fix-payment-flow "Fix payment flow for subscription upgrades" --max-turns 30
+    python forge/forge_plan.py <change-id> "<short description>"
+    python forge/forge_plan.py <change-id> "<short description>" --max-turns 30
+    python forge/forge_plan.py <change-id> --from-file <path/to/spec.md>
 """
 
 import argparse
@@ -27,10 +28,11 @@ You are starting the FORGE PLAN phase.
 
 Change ID: {change_id}
 
-Feature request:
+Feature request{source_label}:
 ---
 {description}
 ---
+{source_note}
 
 MANDATORY — read ALL of these files before writing anything:
 1. AGENTS.md
@@ -105,11 +107,31 @@ def create_change_dir(change_id: str) -> Path:
     return change_dir
 
 
-def run_claude_plan(change_id: str, description: str, max_turns: int, timeout: int) -> int:
+def run_claude_plan(
+    change_id: str,
+    description: str,
+    max_turns: int,
+    timeout: int,
+    source_path: Path | None = None,
+) -> int:
     """Invoke Claude Code with the planning prompt. Returns exit code."""
+    if source_path is not None:
+        source_label = f" (sourced from {source_path})"
+        source_note = (
+            "\nNOTE: The feature request above is a detailed spec document. "
+            "Treat it as authoritative — decompose into as many atomic tasks as needed, "
+            "do not condense or skip details. If anything conflicts with the global constraints "
+            "or AGENTS.md rules, surface it in Open Questions rather than silently dropping it.\n"
+        )
+    else:
+        source_label = ""
+        source_note = ""
+
     prompt = PLAN_PROMPT_TEMPLATE.format(
         change_id=change_id,
         description=description,
+        source_label=source_label,
+        source_note=source_note,
     )
 
     print(f"\n🤖 Invoking Claude (max-turns: {max_turns}, timeout: {timeout}s)...")
@@ -194,25 +216,72 @@ Examples:
         """,
     )
     parser.add_argument("change_id", help="Change ID in kebab-case")
-    parser.add_argument("description", help="Feature description (can be short or long)")
-    parser.add_argument("--max-turns", type=int, default=25, help="Max Claude turns (default: 25)")
-    parser.add_argument("--timeout", type=int, default=600, help="Max seconds (default: 600)")
+    parser.add_argument(
+        "description",
+        nargs="?",
+        default=None,
+        help="Feature description (omit if using --from-file)",
+    )
+    parser.add_argument(
+        "--from-file",
+        type=Path,
+        default=None,
+        help="Read the feature description from a file (e.g. _input/SPEC.md). "
+             "When set, defaults to --max-turns 60 --timeout 1800.",
+    )
+    parser.add_argument(
+        "--max-turns",
+        type=int,
+        default=None,
+        help="Max Claude turns (default: 25 inline, 60 with --from-file)",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=None,
+        help="Max seconds (default: 600 inline, 1800 with --from-file)",
+    )
     args = parser.parse_args()
 
     validate_change_id(args.change_id)
 
+    if args.from_file and args.description:
+        print("❌ Pass either a positional description OR --from-file, not both.")
+        sys.exit(1)
+    if not args.from_file and not args.description:
+        print("❌ Missing feature description. Pass it as a positional arg or use --from-file PATH.")
+        sys.exit(1)
+
+    if args.from_file:
+        if not args.from_file.is_file():
+            print(f"❌ --from-file path does not exist: {args.from_file}")
+            sys.exit(1)
+        description = args.from_file.read_text()
+        source_path: Path | None = args.from_file
+        default_max_turns, default_timeout = 60, 1800
+        desc_preview = f"<{len(description)} chars from {args.from_file}>"
+    else:
+        description = args.description
+        source_path = None
+        default_max_turns, default_timeout = 25, 600
+        desc_preview = args.description
+
+    max_turns = args.max_turns if args.max_turns is not None else default_max_turns
+    timeout = args.timeout if args.timeout is not None else default_timeout
+
     print()
     print("🔨 FORGE — PLAN phase")
     print(f"   change:      {args.change_id}")
-    print(f"   description: {args.description}")
+    print(f"   description: {desc_preview}")
 
     change_dir = create_change_dir(args.change_id)
 
     exit_code = run_claude_plan(
         args.change_id,
-        args.description,
-        args.max_turns,
-        args.timeout,
+        description,
+        max_turns,
+        timeout,
+        source_path=source_path,
     )
 
     print_next_steps(args.change_id, change_dir)

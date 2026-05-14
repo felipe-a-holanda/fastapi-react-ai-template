@@ -34,3 +34,6 @@ htmlcov/
 
 # FORGE Obsidian Vault (generated)
 .forge-vault/
+
+# FORGE per-run logs
+forge/logs/
