@@ -111,7 +111,9 @@ def run_claude(timeout: int, log_path: Path) -> tuple[int, float, dict | None, b
     """Run Claude Code with the FORGE prompt using stream-json.
 
     Streams assistant text to both terminal and `log_path`. Captures token usage
-    from the final `result` event. Detects rate-limit messages inline.
+    from the final `result` event. Detects rate-limit messages inline. Also
+    appends the raw stream-json (every event, including tool calls/results) to
+    a sibling `.jsonl` file for offline forensics.
 
     Returns (exit_code, elapsed_seconds, usage_dict_or_None, hit_rate_limit).
     """
@@ -163,11 +165,19 @@ def run_claude(timeout: int, log_path: Path) -> tuple[int, float, dict | None, b
     wd.start()
 
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(log_path, "a", buffering=1) as log_handle:
+    jsonl_path = log_path.with_suffix(".jsonl")
+    iter_marker = json.dumps({
+        "_forge_marker": "iteration_started",
+        "ts": datetime.now(timezone.utc).isoformat(),
+    })
+    with open(log_path, "a", buffering=1) as log_handle, \
+         open(jsonl_path, "a", buffering=1) as jsonl_handle:
         log_handle.write(f"\n\n=== iteration started {datetime.now().isoformat()} ===\n")
+        jsonl_handle.write(iter_marker + "\n")
         try:
             assert proc.stdout is not None
             for line in proc.stdout:
+                jsonl_handle.write(line if line.endswith("\n") else line + "\n")
                 try:
                     event = json.loads(line)
                 except json.JSONDecodeError:
@@ -323,9 +333,12 @@ def main():
         print(f"  Next: {next_task_name(change_dir)}")
         sys.exit(0)
 
-    # Persistent log for this run — assistant text only (parsed from stream-json)
+    # Persistent log for this run — assistant text only (parsed from stream-json).
+    # A sibling .jsonl file gets the raw stream-json events (all iterations appended)
+    # for offline forensics on tool calls, errors, etc.
     log_path = LOGS_DIR / f"{change_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
     print(f"   log file       : {log_path}")
+    print(f"   raw events     : {log_path.with_suffix('.jsonl')}")
 
     # ── Execution loop ───────────────────────────────────────────────────
 
