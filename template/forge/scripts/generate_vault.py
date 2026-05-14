@@ -31,7 +31,8 @@ class VaultGenerator:
     # Wiki-link mappings for file path conversions
     WIKILINK_MAPPINGS = {
         "forge/FORGE.md": "FORGE-Protocol",
-        "forge/CLAUDE.md": "CLAUDE-Manual",
+        "forge/AGENTS.md": "FORGE-Agent-Manual",
+        "forge/CLAUDE.md": "CLAUDE-Shim",
         "forge/global/architecture.md": "Architecture",
         "forge/global/constraints.md": "Constraints",
         "forge/global/verification.md": "Verification",
@@ -94,7 +95,7 @@ class VaultGenerator:
         """Validate that FORGE structure exists."""
         required = [
             self.forge_dir / "FORGE.md",
-            self.forge_dir / "CLAUDE.md",
+            self.forge_dir / "AGENTS.md",
             self.global_dir / "architecture.md",
             self.global_dir / "constraints.md",
             self.global_dir / "verification.md",
@@ -210,7 +211,7 @@ class VaultGenerator:
 
         docs = [
             (self.forge_dir / "FORGE.md", "FORGE-Protocol.md", "protocol-doc", ["forge/core", "protocol"]),
-            (self.forge_dir / "CLAUDE.md", "CLAUDE-Manual.md", "agent-manual", ["forge/core", "agent"]),
+            (self.forge_dir / "AGENTS.md", "FORGE-Agent-Manual.md", "agent-manual", ["forge/core", "agent"]),
             (self.global_dir / "architecture.md", "Architecture.md", "architecture", ["forge/core", "architecture"]),
             (self.global_dir / "constraints.md", "Constraints.md", "constraints", ["forge/core", "constraints"]),
             (self.global_dir / "verification.md", "Verification.md", "verification", ["forge/core", "verification"]),

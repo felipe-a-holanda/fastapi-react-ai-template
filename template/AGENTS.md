@@ -20,7 +20,7 @@ just forge --max-iterations 5 # Limit to 5 tasks
 just forge-status             # Dry-run preview
 ```
 
-See `forge/FORGE.md` for the full protocol and `forge/CLAUDE.md` for the operating manual.
+See `forge/FORGE.md` for the full protocol and `forge/AGENTS.md` for the operating manual.
 
 For quick single-file fixes, follow the checklist below directly.
 

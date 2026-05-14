@@ -6,13 +6,13 @@ This file provides context for Claude Code when working in this repository.
 
 This project uses the **FORGE spec-driven development protocol** for autonomous feature development.
 
-**If a FORGE change is active**, follow the bootstrap sequence in `forge/CLAUDE.md` instead of this file.
+**If a FORGE change is active**, follow the bootstrap sequence in `forge/AGENTS.md` instead of this file.
 
 To check: look in `forge/changes/` for any `state.json` where `phase` is not `"DONE"`.
 
 ### FORGE Bootstrap (every session with an active change)
 
-1. Read `forge/CLAUDE.md` (full operating protocol)
+1. Read `forge/AGENTS.md` (full operating protocol)
 2. Read `AGENTS.md` (architecture rules + feature checklist)
 3. Read `forge/global/constraints.md` and `forge/global/verification.md`
 4. Read the active change's `state.json` → `spec.md` → `tasks.md` → `decisions.md`
@@ -21,7 +21,7 @@ To check: look in `forge/changes/` for any `state.json` where `phase` is not `"D
 ### Starting a New FORGE Change
 
 ```bash
-# 1. Plan — Claude reads architecture + constraints and produces the full spec
+# 1. Plan — the configured FORGE runner reads architecture + constraints and produces the full spec
 just forge-plan {change-id} "Feature description"
 
 # 2. Review — print spec.md + tasks.md to read

@@ -92,9 +92,10 @@ reset:
     just seed
     @echo "✓ Database reset complete. Admin user: admin@example.com / admin"
 
-# FORGE: Plan a new change — Claude reads architecture + constraints and produces a full spec
+# FORGE: Plan a new change — the configured agent reads architecture + constraints and produces a full spec
 # Usage:
 #   just forge-plan <change-id> "<short description>"
+#   just forge-plan <change-id> "<short description>" --agent codex
 #   just forge-plan <change-id> --from-file <path/to/spec.md>
 forge-plan *args:
     python forge/forge_plan.py {{args}}
@@ -130,7 +131,10 @@ forge-approve *change_id:
         python forge/forge_approve.py
     fi
 
-# FORGE: Run autonomous execution loop (requires Claude Code CLI)
+# FORGE: Run autonomous execution loop
+# Usage:
+#   just forge
+#   just forge --agent codex
 forge *args:
     python forge/forge_run.py {{args}}
 
@@ -169,7 +173,7 @@ template-sync *args:
 # Refuses to clobber uncommitted template-side work either way.
 # Usage:
 #   just forge-publish "feat(forge): full mirror message"
-#   just forge-publish "feat(forge): partial" CLAUDE.md PLAN_PROMPT.md forge_run.py
+#   just forge-publish "feat(forge): partial" AGENTS.md PLAN_PROMPT.md forge_run.py
 forge-publish msg *files:
     #!/usr/bin/env bash
     set -euo pipefail
