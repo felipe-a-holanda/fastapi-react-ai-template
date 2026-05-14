@@ -23,9 +23,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 try:
-    from agent_runner import print_agent_result, resolve_agent, run_agent
+    from agent_runner import print_agent_result, resolve_agent, resolve_model, run_agent
 except ModuleNotFoundError:
-    from forge.agent_runner import print_agent_result, resolve_agent, run_agent
+    from forge.agent_runner import (
+        print_agent_result,
+        resolve_agent,
+        resolve_model,
+        run_agent,
+    )
 
 FORGE_DIR = Path("forge")
 CHANGES_DIR = FORGE_DIR / "changes"
@@ -221,10 +226,14 @@ Examples:
     parser.add_argument(
         "--model",
         default=None,
-        help="Model to pass through to the selected agent CLI",
+        help=(
+            "Model to pass through to the selected agent CLI "
+            "(default: claude-opus-4-7 for Claude, gpt-5.5 for Codex)"
+        ),
     )
     args = parser.parse_args()
     agent = resolve_agent(args.agent)
+    model = resolve_model(agent, "plan", args.model)
 
     validate_change_id(args.change_id)
 
@@ -257,6 +266,7 @@ Examples:
     print()
     print("🔨 FORGE — PLAN phase")
     print(f"   agent:       {agent}")
+    print(f"   model:       {model}")
     print(f"   change:      {args.change_id}")
     print(f"   description: {desc_preview}")
 
@@ -268,7 +278,7 @@ Examples:
         max_turns,
         timeout,
         agent,
-        args.model,
+        model,
         source_path=source_path,
     )
 

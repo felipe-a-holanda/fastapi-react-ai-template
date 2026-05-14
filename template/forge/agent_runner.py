@@ -22,6 +22,20 @@ from typing import TextIO
 HEARTBEAT_INTERVAL = 30
 RATE_LIMIT_NEEDLE = "you've hit your limit"
 
+DEFAULT_MODELS = {
+    ("claude", "plan"): "claude-opus-4-7",
+    ("claude", "execute"): "claude-sonnet-4-6",
+    ("codex", "plan"): "gpt-5.5",
+    ("codex", "execute"): "gpt-5.3-codex",
+}
+
+MODEL_ENV_VARS = {
+    ("claude", "plan"): "FORGE_CLAUDE_PLAN_MODEL",
+    ("claude", "execute"): "FORGE_CLAUDE_EXEC_MODEL",
+    ("codex", "plan"): "FORGE_CODEX_PLAN_MODEL",
+    ("codex", "execute"): "FORGE_CODEX_EXEC_MODEL",
+}
+
 
 @dataclass
 class AgentResult:
@@ -40,6 +54,13 @@ def resolve_agent(agent: str | None) -> str:
         print("   Supported agents: claude, codex")
         sys.exit(1)
     return selected
+
+
+def resolve_model(agent: str, phase: str, model: str | None) -> str:
+    if model:
+        return model
+    env_var = MODEL_ENV_VARS[(agent, phase)]
+    return os.environ.get(env_var) or DEFAULT_MODELS[(agent, phase)]
 
 
 def build_command(

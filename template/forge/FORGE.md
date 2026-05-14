@@ -54,6 +54,17 @@ just forge --agent codex
 FORGE_AGENT=codex just forge
 ```
 
+Default models:
+
+| Agent | PLAN model | EXECUTE model |
+|-------|------------|---------------|
+| Claude | `claude-opus-4-7` | `claude-sonnet-4-6` |
+| Codex | `gpt-5.5` | `gpt-5.3-codex` |
+
+Override with `--model`, or with `FORGE_CLAUDE_PLAN_MODEL`,
+`FORGE_CLAUDE_EXEC_MODEL`, `FORGE_CODEX_PLAN_MODEL`, and
+`FORGE_CODEX_EXEC_MODEL`.
+
 The Claude runner uses the Claude Code CLI. The Codex runner uses
 `codex exec --json --sandbox danger-full-access --ask-for-approval never` and
 sets `XDG_RUNTIME_DIR=/tmp` for the subprocess by default. Override with

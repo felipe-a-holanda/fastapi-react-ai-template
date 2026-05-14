@@ -21,9 +21,14 @@ from datetime import datetime
 from pathlib import Path
 
 try:
-    from agent_runner import print_agent_result, resolve_agent, run_agent
+    from agent_runner import print_agent_result, resolve_agent, resolve_model, run_agent
 except ModuleNotFoundError:
-    from forge.agent_runner import print_agent_result, resolve_agent, run_agent
+    from forge.agent_runner import (
+        print_agent_result,
+        resolve_agent,
+        resolve_model,
+        run_agent,
+    )
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
@@ -274,7 +279,10 @@ def main():
         "--model",
         type=str,
         default=None,
-        help="Model to pass through to the selected agent CLI. Defaults to the CLI's configured model.",
+        help=(
+            "Model to pass through to the selected agent CLI "
+            "(default: claude-sonnet-4-6 for Claude, gpt-5.3-codex for Codex)."
+        ),
     )
     parser.add_argument(
         "--max-turns",
@@ -290,6 +298,7 @@ def main():
     )
     args = parser.parse_args()
     agent = resolve_agent(args.agent)
+    model = resolve_model(agent, "execute", args.model)
 
     print()
     print("🔨 FORGE — autonomous execution")
@@ -298,7 +307,7 @@ def main():
     print(f"   cooldown       : {args.cooldown}s")
     print(f"   timeout/iter   : {args.timeout}s")
     print(f"   max-turns/iter : {args.max_turns}")
-    print(f"   model          : {args.model or '(CLI default)'}")
+    print(f"   model          : {model}")
 
     # Find active change
     result = find_active_change(args.change)
@@ -375,7 +384,7 @@ def main():
             prompt=PROMPT,
             timeout=args.timeout,
             max_turns=args.max_turns,
-            model=args.model,
+            model=model,
             log_path=log_path,
         )
         print_agent_result(agent, result)
