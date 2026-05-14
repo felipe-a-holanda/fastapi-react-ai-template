@@ -145,4 +145,17 @@ forge-new change_id *args:
 # Generate or update Obsidian vault from FORGE documents
 vault output_path=".forge-vault" *args:
     python forge/scripts/generate_vault.py --output {{output_path}} {{args}}
+
+# Sync this project with the Copier template safely.
+# Refuses to run with uncommitted tracked changes. Disables destructive cleanup
+# on failure. Excludes local-only dirs so they survive even if Copier misbehaves.
+template-sync *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if ! git diff --quiet HEAD; then
+        echo "❌ Working tree not clean. Commit or stash tracked changes first."
+        exit 1
+    fi
+    copier update --trust --cleanup-on-failure=false \
+        --exclude='_input/**' --exclude='.claude/**' {{args}}
 {% endraw %}
