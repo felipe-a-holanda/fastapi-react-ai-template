@@ -158,4 +158,107 @@ template-sync *args:
     fi
     copier update --trust --cleanup-on-failure=false \
         --exclude='_input/**' --exclude='.claude/**' {{args}}
+
+# Publish local forge/* edits back to the copier template, then bump _commit.
+# Without file args: mirrors forge/ → <template>/template/forge/ (refuses if any
+#   drifting file contains Jinja markup in the template — those always diverge
+#   between project (rendered) and template (with {% raw %}), so full mirror
+#   would clobber them).
+# With file args: cherry-publish only the listed files (paths relative to forge/).
+#   Each file is checked individually for Jinja markup on the template side.
+# Refuses to clobber uncommitted template-side work either way.
+# Usage:
+#   just forge-publish "feat(forge): full mirror message"
+#   just forge-publish "feat(forge): partial" CLAUDE.md PLAN_PROMPT.md forge_run.py
+forge-publish msg *files:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    TEMPLATE=$(sed -n 's/^_src_path: //p' .copier-answers.yml)
+    if [ -z "$TEMPLATE" ] || [ ! -d "$TEMPLATE" ]; then
+        echo "❌ Could not resolve template path from .copier-answers.yml (_src_path)."
+        exit 1
+    fi
+    DEST="$TEMPLATE/template/forge"
+    if [ ! -d "$DEST" ]; then
+        echo "❌ Template forge dir missing: $DEST"
+        exit 1
+    fi
+
+    if ! git -C "$TEMPLATE" diff --quiet HEAD -- template/forge/; then
+        echo "❌ Template repo has uncommitted changes in template/forge/."
+        echo "   Commit or stash them in $TEMPLATE before publishing."
+        exit 1
+    fi
+
+    FILES="{{files}}"
+    JINJA_RE='\{%-?\s*(raw|if|for|set|endraw|endif|endfor)|\{\{'
+
+    if [ -z "$FILES" ]; then
+        # ── Full mirror path ─────────────────────────────────────────
+        RSYNC_EXCLUDES=(--exclude='changes/' --exclude='__pycache__/' --exclude='logs/' --exclude='*.pyc')
+        DRIFT=$(rsync -rnc --out-format='%n' "${RSYNC_EXCLUDES[@]}" forge/ "$DEST/" | grep -v '/$' || true)
+        BLOCKED=()
+        for f in $DRIFT; do
+            tpl_path="$DEST/$f"
+            if [ -f "$tpl_path" ] && grep -qE "$JINJA_RE" "$tpl_path"; then
+                BLOCKED+=("$f")
+            fi
+        done
+        if [ ${#BLOCKED[@]} -gt 0 ]; then
+            echo "❌ Refusing to clobber template files with Jinja markup:"
+            for f in "${BLOCKED[@]}"; do echo "     template/forge/$f"; done
+            echo ""
+            echo "   These render to a different shape in the project. Either:"
+            echo "     1) Cherry-publish only the safe files:"
+            echo "        just forge-publish \"<msg>\" <relpath1> <relpath2> ..."
+            echo "     2) Edit them upstream in the template and 'just template-sync' to pull."
+            exit 1
+        fi
+
+        echo "==> Mirroring forge/ → $DEST/"
+        rsync -av --delete "${RSYNC_EXCLUDES[@]}" forge/ "$DEST/"
+    else
+        # ── Cherry-publish path (per-file) ───────────────────────────
+        # Validate each listed file BEFORE touching anything in the template.
+        for f in $FILES; do
+            src="forge/$f"
+            dst="$DEST/$f"
+            if [ ! -f "$src" ]; then
+                echo "❌ Source missing: $src"
+                exit 1
+            fi
+            if [ -f "$dst" ] && grep -qE "$JINJA_RE" "$dst"; then
+                echo "❌ template/forge/$f contains Jinja markup; edit upstream instead."
+                exit 1
+            fi
+        done
+        echo "==> Cherry-mirroring $(echo $FILES | wc -w) file(s) into $DEST/"
+        for f in $FILES; do
+            src="forge/$f"
+            dst="$DEST/$f"
+            mkdir -p "$(dirname "$dst")"
+            cp "$src" "$dst"
+            echo "    forge/$f → template/forge/$f"
+        done
+    fi
+
+    if git -C "$TEMPLATE" diff --quiet -- template/forge/ && \
+       [ -z "$(git -C "$TEMPLATE" ls-files --others --exclude-standard -- template/forge/)" ]; then
+        echo "✓ Nothing to publish — template already matches."
+        exit 0
+    fi
+
+    echo "==> Committing in template"
+    git -C "$TEMPLATE" add template/forge/
+    git -C "$TEMPLATE" commit -m "{{msg}}"
+    NEW_SHA=$(git -C "$TEMPLATE" rev-parse HEAD)
+
+    echo "==> Bumping _commit in project"
+    sed -i "s/^_commit: .*/_commit: $NEW_SHA/" .copier-answers.yml
+    git add .copier-answers.yml
+    git commit -m "chore: bump copier _commit to ${NEW_SHA:0:7}"
+
+    echo ""
+    echo "✓ Published. Template HEAD: ${NEW_SHA:0:7}"
 {% endraw %}
