@@ -37,8 +37,9 @@ PROGRESS_END = "<!-- forge:progress:end -->"
 PROGRESS_BAR_WIDTH = 20
 
 PROMPT = (
-    "Read CLAUDE.md and AGENTS.md. Execute the next pending task for the active change. "
-    "Follow the FORGE protocol exactly. Use the items feature as reference pattern."
+    "Read forge/CLAUDE.md (bootstrap), AGENTS.md, and the active change's "
+    "spec.md / tasks.md / decisions.md. Execute the next pending task following "
+    "the FORGE protocol exactly. Stop after one task and commit."
 )
 
 # ── Data helpers ─────────────────────────────────────────────────────────────
@@ -179,7 +180,12 @@ def update_tasks_progress(change_dir: Path, counts: dict, current: str) -> None:
 # ── Execution ────────────────────────────────────────────────────────────────
 
 
-def run_claude(timeout: int, log_path: Path) -> tuple[int, float, dict | None, bool]:
+def run_claude(
+    timeout: int,
+    log_path: Path,
+    model: str | None,
+    max_turns: int,
+) -> tuple[int, float, dict | None, bool]:
     """Run Claude Code with the FORGE prompt using stream-json.
 
     Streams assistant text to both terminal and `log_path`. Captures token usage
@@ -193,16 +199,20 @@ def run_claude(timeout: int, log_path: Path) -> tuple[int, float, dict | None, b
     hit_rate_limit = False
     usage: dict | None = None
 
+    cmd = [
+        CLAUDE_CMD,
+        "--dangerously-skip-permissions",
+        "--max-turns", str(max_turns),
+        "--output-format", "stream-json",
+        "--verbose",
+    ]
+    if model:
+        cmd.extend(["--model", model])
+    cmd.extend(["-p", PROMPT])
+
     try:
         proc = subprocess.Popen(
-            [
-                CLAUDE_CMD,
-                "--dangerously-skip-permissions",
-                "--max-turns", "50",
-                "--output-format", "stream-json",
-                "--verbose",
-                "-p", PROMPT,
-            ],
+            cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             stdin=subprocess.DEVNULL,
@@ -361,6 +371,16 @@ def main():
     parser.add_argument("--timeout", type=int, default=900, help="max seconds per Claude invocation")
     parser.add_argument("--change", type=str, default=None, help="target a specific change ID")
     parser.add_argument("--dry-run", action="store_true", help="show what would happen without running")
+    parser.add_argument(
+        "--model", type=str, default=None,
+        help="Claude model to use (e.g. claude-sonnet-4-6, claude-opus-4-7). "
+             "Defaults to the CLI's configured model.",
+    )
+    parser.add_argument(
+        "--max-turns", type=int, default=50,
+        help="Max turns per Claude invocation (default 50; raise to ~80 for Sonnet, "
+             "which tends to use more turns per task than Opus).",
+    )
     args = parser.parse_args()
 
     # Force the `claude` CLI to authenticate via the OAuth credentials in
@@ -376,6 +396,8 @@ def main():
     print(f"   max iterations : {args.max_iterations}")
     print(f"   cooldown       : {args.cooldown}s")
     print(f"   timeout/iter   : {args.timeout}s")
+    print(f"   max-turns/iter : {args.max_turns}")
+    print(f"   model          : {args.model or '(CLI default)'}")
 
     # Find active change
     result = find_active_change(args.change)
@@ -449,7 +471,9 @@ def main():
         print(f"  🤖 Launching Claude (timeout: {args.timeout}s)...")
 
         # Run Claude
-        exit_code, elapsed, usage, hit_rate_limit = run_claude(args.timeout, log_path)
+        exit_code, elapsed, usage, hit_rate_limit = run_claude(
+            args.timeout, log_path, args.model, args.max_turns,
+        )
         print_result(exit_code, elapsed)
 
         # Refresh progress block to reflect whatever the agent changed.

@@ -58,6 +58,32 @@ tasks.md — ordered atomic tasks following the AGENTS.md feature-addition check
   → migration → frontend (hooks→schema→components) → tests (pytest + Vitest)
   Each task must have: status [ ], touches, depends, verify, notes fields.
 
+  **Task sizing (executor is Claude Sonnet by default — plan for that):**
+  - Each task touches AT MOST ~3 files and adds ~80 lines of new code.
+  - Each task has ONE primary concern. If your `notes` describes more than three
+    distinct concerns (e.g. "streaming + persist + async schedule + error
+    paths"), SPLIT into sub-tasks with suffixes `a`/`b`/`c`/`d`
+    (e.g. `task-29a`, `task-29b`). Sub-tasks ship in the same commit as
+    the parent and share the same commit-boundary verification.
+  - Orchestration-heavy services (multi-step async generators with error
+    branches, streaming + persistence + side effects) MUST be split — at
+    minimum: (a) scaffold + pure helpers, (b) state load/save + input
+    validation, (c) main loop / happy path, (d) error/cancel paths.
+  - Test files that bundle >4 scenarios MUST be split per scenario family
+    into separate test files (one task each).
+
+  **Verify command rule:**
+  - The `verify` command of a task MUST pass at the moment that task
+    completes — it CANNOT reference test files created by later tasks.
+  - For backend implementation tasks scheduled BEFORE their test file
+    exists, use import-smoke:
+    `cd apps/backend && .venv/bin/python -c "from app.x.y import Z"`.
+  - Pytest verify (`.venv/bin/pytest tests/test_x.py`) is owned ONLY by
+    the test-authoring task that creates that file.
+  - Migration tasks verify with `just db-upgrade && just db-downgrade && just db-upgrade`.
+  - OpenAPI tasks verify with `just generate-client` followed by a
+    build check (`pnpm build` or pytest contract test if test exists).
+
 decisions.md — empty log with the standard header only.
 
 state.json — set to:

@@ -111,6 +111,8 @@ Answer each one. "N/A" is valid. Skipping is not.
 11. Does this feature require OpenAPI contract changes? If so, is the contract task first?
 12. Does this follow the `items` reference pattern? If not, why?
 13. Does this change cross domain boundaries? If so, are the interfaces between domains explicit?
+14. **Task sizing for the executor**: the default executor model is Claude Sonnet. Is any single task large enough that Sonnet would likely fail in one iteration? Indicators: >3 files touched, >100 lines of new code, multiple distinct concerns in `notes` (e.g. "streaming + persist + async schedule + error paths"), or a `verify` that exercises a multi-step orchestration. If yes, split into sub-tasks with suffixes `a`/`b`/`c`/`d`.
+15. **Verify-command validity**: does every task's `verify` command pass at the moment that task completes — i.e. references no file that a later task will create? Pre-test implementation tasks should verify with import-smoke (`python -c "from x import Y"`); pytest is owned only by the test-authoring task that creates that test file.
 
 ---
 
