@@ -91,7 +91,7 @@ Request → Router (api/) → Service (services/) → Repository (repositories/)
 
 Each layer has ONE responsibility:
 - **Router**: HTTP concerns (status codes, request parsing, response serialization)
-- **Service**: Business logic (validation rules, orchestration, raises HTTPException)
+- **Service**: Business logic (validation rules, orchestration, raises domain exceptions from `app.exceptions`)
 - **Repository**: Data access (SQLAlchemy queries, CRUD operations, returns None on not-found)
 
 ## Key Patterns

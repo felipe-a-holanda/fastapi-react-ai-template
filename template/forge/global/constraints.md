@@ -46,10 +46,10 @@
 
 ### Backend Layering (strict)
 - **Router** (api/): HTTP concerns only — status codes, request parsing, response serialization
-- **Service** (services/): Business logic, orchestration, raises HTTPException
+- **Service** (services/): Business logic, orchestration, raises domain exceptions from `app.exceptions`
 - **Repository** (repositories/): Database access only — SQLAlchemy queries, returns None on not-found
 - Routers NEVER touch the database or import SQLAlchemy
-- Services NEVER import FastAPI (except HTTPException)
+- Services NEVER import FastAPI
 - Repositories NEVER contain business logic or raise HTTP exceptions
 - All environment variables accessed through `app/config.py` (Pydantic Settings)
 

@@ -2,7 +2,7 @@
 """
 forge-run — Autonomous execution loop for the FORGE protocol.
 
-Finds the active change, drives Claude Code through one task per iteration,
+Finds the active change, drives the configured agent through one task per iteration,
 and stops when all tasks are done, blocked, or limits are hit.
 
 Usage:
@@ -13,31 +13,32 @@ Usage:
 
 import argparse
 import json
-import os
 import re
 import subprocess
 import sys
-import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
+
+try:
+    from agent_runner import print_agent_result, resolve_agent, run_agent
+except ModuleNotFoundError:
+    from forge.agent_runner import print_agent_result, resolve_agent, run_agent
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
 FORGE_DIR = Path("forge")
 CHANGES_DIR = FORGE_DIR / "changes"
 LOGS_DIR = FORGE_DIR / "logs"
-CLAUDE_CMD = "claude"
 
-RATE_LIMIT_NEEDLE = "you've hit your limit"
-HEARTBEAT_INTERVAL = 30  # seconds between "still running…" pings
-
-PROGRESS_START = "<!-- forge:progress:start (auto-managed by forge_run; do not edit) -->"
+PROGRESS_START = (
+    "<!-- forge:progress:start (auto-managed by forge_run; do not edit) -->"
+)
 PROGRESS_END = "<!-- forge:progress:end -->"
 PROGRESS_BAR_WIDTH = 20
 
 PROMPT = (
-    "Read forge/CLAUDE.md (bootstrap), AGENTS.md, and the active change's "
+    "Read forge/AGENTS.md (bootstrap), AGENTS.md, and the active change's "
     "spec.md / tasks.md / decisions.md. Execute the next pending task following "
     "the FORGE protocol exactly. Stop after one task and commit."
 )
@@ -108,7 +109,11 @@ def current_or_next_task(change_dir: Path) -> str:
                         return line.replace("### ", "").strip()
         return None
 
-    return find_with_status("status: [~]") or find_with_status("status: [ ]") or "(none found)"
+    return (
+        find_with_status("status: [~]")
+        or find_with_status("status: [ ]")
+        or "(none found)"
+    )
 
 
 def render_progress_block(counts: dict, current: str) -> str:
@@ -124,18 +129,20 @@ def render_progress_block(counts: dict, current: str) -> str:
     bar = "█" * filled + "░" * (PROGRESS_BAR_WIDTH - filled)
     updated = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    return "\n".join([
-        PROGRESS_START,
-        "## Progress",
-        "",
-        f"`{bar}` {pct}% ({done}/{total})",
-        "",
-        f"- ✅ {done} done · 🔄 {in_prog} in progress · ⏳ {pending} pending · 🚧 {blocked} blocked",
-        f"- current: {current}",
-        f"- updated: {updated}",
-        "",
-        PROGRESS_END,
-    ])
+    return "\n".join(
+        [
+            PROGRESS_START,
+            "## Progress",
+            "",
+            f"`{bar}` {pct}% ({done}/{total})",
+            "",
+            f"- ✅ {done} done · 🔄 {in_prog} in progress · ⏳ {pending} pending · 🚧 {blocked} blocked",
+            f"- current: {current}",
+            f"- updated: {updated}",
+            "",
+            PROGRESS_END,
+        ]
+    )
 
 
 def update_tasks_progress(change_dir: Path, counts: dict, current: str) -> None:
@@ -158,141 +165,34 @@ def update_tasks_progress(change_dir: Path, counts: dict, current: str) -> None:
     else:
         # First run: inject after the H1, replacing any legacy `## Metadata` block.
         lines = text.splitlines(keepends=True)
-        h1_idx = next((i for i, l in enumerate(lines) if l.startswith("# ")), -1)
+        h1_idx = next((i for i, line in enumerate(lines) if line.startswith("# ")), -1)
         if h1_idx == -1:
             return
         insert_idx = h1_idx + 1
         while insert_idx < len(lines) and lines[insert_idx].strip() == "":
             insert_idx += 1
-        if insert_idx < len(lines) and lines[insert_idx].lstrip().startswith("## Metadata"):
+        if insert_idx < len(lines) and lines[insert_idx].lstrip().startswith(
+            "## Metadata"
+        ):
             end_idx = next(
-                (i for i in range(insert_idx + 1, len(lines)) if lines[i].startswith("## ")),
+                (
+                    i
+                    for i in range(insert_idx + 1, len(lines))
+                    if lines[i].startswith("## ")
+                ),
                 len(lines),
             )
         else:
             end_idx = insert_idx
-        new_text = "".join(lines[:insert_idx]) + block + "\n\n" + "".join(lines[end_idx:])
+        new_text = (
+            "".join(lines[:insert_idx]) + block + "\n\n" + "".join(lines[end_idx:])
+        )
 
     if new_text != text:
         tasks_file.write_text(new_text)
 
 
 # ── Execution ────────────────────────────────────────────────────────────────
-
-
-def run_claude(
-    timeout: int,
-    log_path: Path,
-    model: str | None,
-    max_turns: int,
-) -> tuple[int, float, dict | None, bool]:
-    """Run Claude Code with the FORGE prompt using stream-json.
-
-    Streams assistant text to both terminal and `log_path`. Captures token usage
-    from the final `result` event. Detects rate-limit messages inline. Also
-    appends the raw stream-json (every event, including tool calls/results) to
-    a sibling `.jsonl` file for offline forensics.
-
-    Returns (exit_code, elapsed_seconds, usage_dict_or_None, hit_rate_limit).
-    """
-    start = time.monotonic()
-    hit_rate_limit = False
-    usage: dict | None = None
-
-    cmd = [
-        CLAUDE_CMD,
-        "--dangerously-skip-permissions",
-        "--max-turns", str(max_turns),
-        "--output-format", "stream-json",
-        "--verbose",
-    ]
-    if model:
-        cmd.extend(["--model", model])
-    cmd.extend(["-p", PROMPT])
-
-    try:
-        proc = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            stdin=subprocess.DEVNULL,
-            text=True,
-            bufsize=1,
-        )
-    except FileNotFoundError:
-        print(f"\n  ✗ '{CLAUDE_CMD}' not found. Is Claude Code installed and in PATH?")
-        sys.exit(1)
-
-    stop_event = threading.Event()
-
-    def heartbeat() -> None:
-        while not stop_event.wait(HEARTBEAT_INTERVAL):
-            elapsed = int(time.monotonic() - start)
-            mins, secs = divmod(elapsed, 60)
-            print(
-                f"  ⏳ Claude still running... {mins}m{secs}s elapsed (timeout at {timeout}s)",
-                file=sys.stderr, flush=True,
-            )
-
-    def watchdog() -> None:
-        if not stop_event.wait(timeout):
-            try:
-                proc.kill()
-            except ProcessLookupError:
-                pass
-
-    hb = threading.Thread(target=heartbeat, daemon=True)
-    wd = threading.Thread(target=watchdog, daemon=True)
-    hb.start()
-    wd.start()
-
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    jsonl_path = log_path.with_suffix(".jsonl")
-    iter_marker = json.dumps({
-        "_forge_marker": "iteration_started",
-        "ts": datetime.now(timezone.utc).isoformat(),
-    })
-    with open(log_path, "a", buffering=1) as log_handle, \
-         open(jsonl_path, "a", buffering=1) as jsonl_handle:
-        log_handle.write(f"\n\n=== iteration started {datetime.now().isoformat()} ===\n")
-        jsonl_handle.write(iter_marker + "\n")
-        try:
-            assert proc.stdout is not None
-            for line in proc.stdout:
-                jsonl_handle.write(line if line.endswith("\n") else line + "\n")
-                try:
-                    event = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-
-                ev_type = event.get("type")
-                if ev_type == "assistant":
-                    msg = event.get("message") or {}
-                    for block in msg.get("content") or []:
-                        if block.get("type") == "text":
-                            text = block.get("text", "")
-                            sys.stdout.write(text)
-                            sys.stdout.flush()
-                            log_handle.write(text)
-                            if RATE_LIMIT_NEEDLE in text.lower():
-                                hit_rate_limit = True
-                elif ev_type == "result":
-                    u = event.get("usage") or {}
-                    usage = {
-                        "input_tokens": u.get("input_tokens"),
-                        "output_tokens": u.get("output_tokens"),
-                    }
-        finally:
-            stop_event.set()
-            proc.wait()
-
-    elapsed = time.monotonic() - start
-
-    # Watchdog killed it → treat as timeout, regardless of exit code shape
-    if elapsed >= timeout and proc.returncode != 0:
-        return 124, elapsed, usage, hit_rate_limit
-
-    return proc.returncode, elapsed, usage, hit_rate_limit
 
 
 def run_verification() -> tuple[bool, str]:
@@ -336,28 +236,19 @@ def print_header(iteration: int, max_iter: int, change_id: str, counts: dict):
     print("═" * 60)
     print(f"  FORGE — iteration {iteration}/{max_iter} — {now}")
     print(f"  change: {change_id}")
-    print(f"  ✅ {done} done · ⏳ {pending} pending · 🚧 {blocked} blocked · 🔄 {in_prog} in progress")
+    print(
+        f"  ✅ {done} done · ⏳ {pending} pending · 🚧 {blocked} blocked · 🔄 {in_prog} in progress"
+    )
     print("═" * 60)
-
-
-def print_result(exit_code: int, elapsed: float):
-    mins = int(elapsed) // 60
-    secs = int(elapsed) % 60
-    time_str = f"{mins}m{secs}s" if mins > 0 else f"{secs}s"
-
-    if exit_code == 124:
-        print(f"\n  ⚠  TIMEOUT after {time_str} — Claude was killed")
-    elif exit_code != 0:
-        print(f"\n  ⚠  Claude exited with code {exit_code} after {time_str}")
-    else:
-        print(f"\n  ✔  Claude finished in {time_str}")
 
 
 def print_final(counts: dict, reason: str):
     print()
     print("─" * 60)
     print(f"  FORGE run complete: {reason}")
-    print(f"  ✅ {counts['done']} done · ⏳ {counts['pending']} pending · 🚧 {counts['blocked']} blocked")
+    print(
+        f"  ✅ {counts['done']} done · ⏳ {counts['pending']} pending · 🚧 {counts['blocked']} blocked"
+    )
     print("─" * 60)
 
 
@@ -367,32 +258,42 @@ def print_final(counts: dict, reason: str):
 def main():
     parser = argparse.ArgumentParser(description="FORGE autonomous execution runner")
     parser.add_argument("--max-iterations", type=int, default=100)
-    parser.add_argument("--cooldown", type=int, default=5, help="seconds between iterations")
-    parser.add_argument("--timeout", type=int, default=900, help="max seconds per Claude invocation")
-    parser.add_argument("--change", type=str, default=None, help="target a specific change ID")
-    parser.add_argument("--dry-run", action="store_true", help="show what would happen without running")
     parser.add_argument(
-        "--model", type=str, default=None,
-        help="Claude model to use (e.g. claude-sonnet-4-6, claude-opus-4-7). "
-             "Defaults to the CLI's configured model.",
+        "--cooldown", type=int, default=5, help="seconds between iterations"
     )
     parser.add_argument(
-        "--max-turns", type=int, default=50,
-        help="Max turns per Claude invocation (default 50; raise to ~80 for Sonnet, "
-             "which tends to use more turns per task than Opus).",
+        "--timeout", type=int, default=900, help="max seconds per agent invocation"
+    )
+    parser.add_argument(
+        "--change", type=str, default=None, help="target a specific change ID"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="show what would happen without running"
+    )
+    parser.add_argument(
+        "--model",
+        type=str,
+        default=None,
+        help="Model to pass through to the selected agent CLI. Defaults to the CLI's configured model.",
+    )
+    parser.add_argument(
+        "--max-turns",
+        type=int,
+        default=50,
+        help="Max turns per agent invocation (Claude only today; Codex ignores this flag).",
+    )
+    parser.add_argument(
+        "--agent",
+        choices=("claude", "codex"),
+        default=None,
+        help="Agent runner to invoke (default: FORGE_AGENT or claude)",
     )
     args = parser.parse_args()
-
-    # Force the `claude` CLI to authenticate via the OAuth credentials in
-    # ~/.claude/.credentials.json (Max/Pro subscription) instead of pay-per-token.
-    # If ANTHROPIC_API_KEY is exported in the shell, the CLI prefers it and bills
-    # against API credits — not what we want for long autonomous loops.
-    os.environ.pop("ANTHROPIC_API_KEY", None)
-    # Avoid `git` blocking on a pager when the agent runs git commands.
-    os.environ["GIT_PAGER"] = "cat"
+    agent = resolve_agent(args.agent)
 
     print()
     print("🔨 FORGE — autonomous execution")
+    print(f"   agent          : {agent}")
     print(f"   max iterations : {args.max_iterations}")
     print(f"   cooldown       : {args.cooldown}s")
     print(f"   timeout/iter   : {args.timeout}s")
@@ -429,9 +330,8 @@ def main():
         print(f"  Next: {current}")
         sys.exit(0)
 
-    # Persistent log for this run — assistant text only (parsed from stream-json).
-    # A sibling .jsonl file gets the raw stream-json events (all iterations appended)
-    # for offline forensics on tool calls, errors, etc.
+    # Persistent log for this run — assistant text only. A sibling .jsonl file
+    # gets raw agent events for offline forensics on tool calls, errors, etc.
     log_path = LOGS_DIR / f"{change_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
     print(f"   log file       : {log_path}")
     print(f"   raw events     : {log_path.with_suffix('.jsonl')}")
@@ -468,32 +368,42 @@ def main():
 
         print_header(iteration, args.max_iterations, change_id, counts)
         print(f"  📌 Next: {current}")
-        print(f"  🤖 Launching Claude (timeout: {args.timeout}s)...")
+        print(f"  🤖 Launching {agent} (timeout: {args.timeout}s)...")
 
-        # Run Claude
-        exit_code, elapsed, usage, hit_rate_limit = run_claude(
-            args.timeout, log_path, args.model, args.max_turns,
+        result = run_agent(
+            agent=agent,
+            prompt=PROMPT,
+            timeout=args.timeout,
+            max_turns=args.max_turns,
+            model=args.model,
+            log_path=log_path,
         )
-        print_result(exit_code, elapsed)
+        print_agent_result(agent, result)
 
         # Refresh progress block to reflect whatever the agent changed.
         post_counts = count_tasks(change_dir)
         update_tasks_progress(change_dir, post_counts, current_or_next_task(change_dir))
 
-        if usage:
-            tin = usage.get("input_tokens")
-            tout = usage.get("output_tokens")
-            print(f"  🔢 tokens_in={tin} tokens_out={tout}")
+        if result.usage:
+            tin = result.usage.get("input_tokens")
+            tout = result.usage.get("output_tokens")
+            if tin is not None or tout is not None:
+                print(f"  🔢 tokens_in={tin} tokens_out={tout}")
 
-        if hit_rate_limit:
-            print_final(post_counts, "rate limit hit — stopping (check log for reset time)")
+        if result.hit_rate_limit:
+            print_final(
+                post_counts, "rate limit hit — stopping (check log for reset time)"
+            )
             sys.exit(2)
 
         # Track consecutive failures
-        if exit_code != 0:
+        if result.exit_code != 0:
             consecutive_failures += 1
             if consecutive_failures >= max_consecutive_failures:
-                print_final(post_counts, f"{max_consecutive_failures} consecutive failures — stopping")
+                print_final(
+                    post_counts,
+                    f"{max_consecutive_failures} consecutive failures — stopping",
+                )
                 sys.exit(1)
         else:
             consecutive_failures = 0
@@ -509,10 +419,11 @@ def main():
         # Git status
         git_result = subprocess.run(
             ["git", "diff", "--stat", "HEAD~1"],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         if git_result.returncode == 0 and git_result.stdout.strip():
-            print(f"\n  📁 Last commit changes:")
+            print("\n  📁 Last commit changes:")
             for line in git_result.stdout.strip().splitlines():
                 print(f"     {line}")
 
@@ -528,7 +439,9 @@ def main():
     # Final summary
     state = load_state(change_dir)
     if state:
-        print(f"\n  Final state: phase={state.get('phase')}, task={state.get('current_task')}")
+        print(
+            f"\n  Final state: phase={state.get('phase')}, task={state.get('current_task')}"
+        )
 
 
 if __name__ == "__main__":

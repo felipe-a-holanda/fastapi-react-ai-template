@@ -39,11 +39,25 @@ The human is involved in two moments: providing the initial prompt, and approvin
 ## Pipeline — Four Commands
 
 ```
-just forge-plan <id> "description"   ← Claude reads arch+constraints → writes full spec → phase=REVIEW
+just forge-plan <id> "description"   ← agent reads arch+constraints → writes full spec → phase=REVIEW
 just forge-review [id]               ← Print spec.md + tasks.md for human review
 just forge-approve [id]              ← Transition REVIEW → EXECUTE, auto-set first task
 just forge                           ← Autonomous execution loop
 ```
+
+Agent runner selection:
+
+```bash
+just forge-plan add-notifications "..." --agent claude   # default
+just forge-plan add-notifications "..." --agent codex
+just forge --agent codex
+FORGE_AGENT=codex just forge
+```
+
+The Claude runner uses the Claude Code CLI. The Codex runner uses
+`codex exec --json --sandbox danger-full-access --ask-for-approval never` and
+sets `XDG_RUNTIME_DIR=/tmp` for the subprocess by default. Override with
+`FORGE_XDG_RUNTIME_DIR` only if your runtime directory is writable.
 
 ### Step 1 — PLAN
 
@@ -51,8 +65,9 @@ just forge                           ← Autonomous execution loop
 just forge-plan add-notifications "Add email notifications when someone comments on an item"
 ```
 
-Claude Code is invoked and **required** to read `AGENTS.md`, `forge/global/architecture.md`,
-`forge/global/constraints.md`, and `forge/global/verification.md` before writing anything.
+The configured agent runner is invoked and **required** to read `AGENTS.md`,
+`forge/AGENTS.md`, `forge/global/architecture.md`, `forge/global/constraints.md`,
+and `forge/global/verification.md` before writing anything.
 
 It produces:
 - `forge/changes/add-notifications/spec.md` — complete spec (Goal, Non-Goals, Does Not Touch, Requirements, Constraints, Invariants, Edge Cases, I/O, Open Questions)
@@ -95,12 +110,14 @@ No manual JSON editing required.
 just forge
 # or target a specific change:
 just forge --change add-notifications
+# or use Codex as the executor:
+just forge --agent codex
 # or limit iterations:
 just forge --max-iterations 10
 ```
 
 The agent runs autonomously until all tasks are done, blocked, or max iterations reached.
-Each task = one commit. Each iteration = one Claude invocation.
+Each task = one commit. Each iteration = one agent-runner invocation.
 
 ### Check progress
 
@@ -127,12 +144,14 @@ The `forge/changes/add-notifications/` directory stays in git history as permane
 
 ```
 /project-root
-  CLAUDE.md                              ← agent operating manual (auto-loaded by Claude Code)
+  CLAUDE.md                              ← Claude Code entrypoint shim
   AGENTS.md                              ← architecture rules + feature-addition checklist
   ARCHITECTURE.md                        ← system map + data flow diagrams
 
   /forge
     FORGE.md                             ← this file (protocol reference)
+    AGENTS.md                            ← agent-neutral FORGE operating manual
+    CLAUDE.md                            ← deprecated shim to AGENTS.md
     forge_run.py                         ← autonomous execution loop
 
     /global
@@ -168,8 +187,9 @@ The `forge/changes/add-notifications/` directory stays in git history as permane
 
 ### Why this structure
 
-- **CLAUDE.md at root**: Claude Code reads it automatically — no prompt injection needed
+- **CLAUDE.md at root**: Claude Code reads it automatically and is directed to the agent-neutral manuals
 - **AGENTS.md at root + per-app**: three-level instructions (root → backend → frontend)
+- **`forge/AGENTS.md`**: FORGE operating manual shared by coding agents
 - **`/forge/global/`**: slow-changing constraints that apply to everything
 - **`/forge/changes/{id}/`**: per-feature memory, lives forever in git history
 - **One directory per feature**: supports parallel development, clean git log
@@ -179,9 +199,9 @@ The `forge/changes/add-notifications/` directory stays in git history as permane
 
 ## File Contracts
 
-### CLAUDE.md
+### forge/AGENTS.md
 
-The agent's single entry point. Read first, followed always. See the template file for the full version.
+The FORGE operating manual. Read after the root `AGENTS.md` when planning or executing a FORGE change.
 
 Key contents:
 - Bootstrap protocol (what to read, in what order, every session)
@@ -294,8 +314,9 @@ PLAN ←→ REVIEW → EXECUTE ←→ VERIFY → DONE
 Triggered by `just forge-plan <id> "description"`.
 
 The planning prompt **mandates** reading `AGENTS.md`, `forge/global/architecture.md`,
-`forge/global/constraints.md`, and `forge/global/verification.md` before writing anything.
-Claude cannot skip these reads — they are hardcoded in the prompt.
+`forge/global/constraints.md`, `forge/global/verification.md`, and `forge/AGENTS.md`
+before writing anything. The agent runner cannot skip these reads — they are hardcoded
+in the prompt.
 
 Agent drafts spec + tasks in a single pass, runs the adversarial checklist against its own spec,
 verifies every requirement is covered by at least one task, and sets phase to `REVIEW`.

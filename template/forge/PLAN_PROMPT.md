@@ -3,9 +3,9 @@
 Canonical instruction set for the FORGE PLAN phase. Consumed by two entry points:
 
 - **Headless** — `forge/forge_plan.py` substitutes the variables below and feeds the
-  result to `claude -p` in a subprocess.
-- **Iterative** — the `forge-plan` skill reads this file inside an existing Claude Code
-  session, substitutes the variables from the user's args, and follows it with
+  result to the configured agent runner in a subprocess.
+- **Iterative** — an agent reads this file inside an existing coding session,
+  substitutes the variables from the user's args, and follows it with
   human-in-the-loop iteration before finalizing.
 
 Both paths read this same file so the protocol stays in one place.
@@ -38,7 +38,7 @@ MANDATORY — read ALL of these files before writing anything:
 2. forge/global/architecture.md
 3. forge/global/constraints.md
 4. forge/global/verification.md
-5. forge/CLAUDE.md  (for the full PLAN phase protocol and adversarial checklist)
+5. forge/AGENTS.md  (for the full PLAN phase protocol and adversarial checklist)
 
 After reading, create the following files in forge/changes/${change_id}/:
 
@@ -58,7 +58,7 @@ tasks.md — ordered atomic tasks following the AGENTS.md feature-addition check
   → migration → frontend (hooks→schema→components) → tests (pytest + Vitest)
   Each task must have: status [ ], touches, depends, verify, notes fields.
 
-  **Task sizing (executor is Claude Sonnet by default — plan for that):**
+  **Task sizing (plan for the default executor):**
   - Each task touches AT MOST ~3 files and adds ~80 lines of new code.
   - Each task has ONE primary concern. If your `notes` describes more than three
     distinct concerns (e.g. "streaming + persist + async schedule + error
@@ -91,7 +91,7 @@ state.json — set to:
     "previous_phase": "PLAN", "last_updated": "<ISO timestamp>",
     "verification_failures": 0, "max_verification_retries": 3 }
 
-Before finalizing, run the adversarial checklist from forge/CLAUDE.md against your own spec.
+Before finalizing, run the adversarial checklist from forge/AGENTS.md against your own spec.
 Answer every item — "N/A" is valid, skipping is not.
 Verify every requirement has at least one task covering it.
 

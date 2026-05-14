@@ -268,7 +268,7 @@ python forge/scripts/generate_vault.py --output .forge-vault --force
 ### Modifying the Generator
 
 The script is organized into methods:
-- `_transform_core_docs()` - Transform FORGE.md, CLAUDE.md, etc.
+- `_transform_core_docs()` - Transform FORGE.md, AGENTS.md, etc.
 - `_transform_changes()` - Transform change directories
 - `_generate_mocs()` - Generate Maps of Content
 - `_generate_canvas()` - Generate canvas files
