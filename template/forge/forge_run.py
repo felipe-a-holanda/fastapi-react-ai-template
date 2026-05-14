@@ -32,6 +32,10 @@ CLAUDE_CMD = "claude"
 RATE_LIMIT_NEEDLE = "you've hit your limit"
 HEARTBEAT_INTERVAL = 30  # seconds between "still running…" pings
 
+PROGRESS_START = "<!-- forge:progress:start (auto-managed by forge_run; do not edit) -->"
+PROGRESS_END = "<!-- forge:progress:end -->"
+PROGRESS_BAR_WIDTH = 20
+
 PROMPT = (
     "Read CLAUDE.md and AGENTS.md. Execute the next pending task for the active change. "
     "Follow the FORGE protocol exactly. Use the items feature as reference pattern."
@@ -86,22 +90,90 @@ def count_tasks(change_dir: Path) -> dict[str, int]:
     }
 
 
-def next_task_name(change_dir: Path) -> str:
-    """Get the name of the next pending task."""
+def current_or_next_task(change_dir: Path) -> str:
+    """Name of the in-progress task if any, else the first pending one."""
     tasks_file = change_dir / "tasks.md"
     if not tasks_file.exists():
         return "(no tasks file)"
 
     text = tasks_file.read_text()
-    # Find task headers followed by pending status
     lines = text.splitlines()
-    for i, line in enumerate(lines):
-        if line.startswith("### task-"):
-            # Check if next non-empty line has pending status
-            for j in range(i + 1, min(i + 5, len(lines))):
-                if "status: [ ]" in lines[j]:
-                    return line.replace("### ", "").strip()
-    return "(none found)"
+
+    def find_with_status(needle: str) -> str | None:
+        for i, line in enumerate(lines):
+            if line.startswith("### task-"):
+                for j in range(i + 1, min(i + 5, len(lines))):
+                    if needle in lines[j]:
+                        return line.replace("### ", "").strip()
+        return None
+
+    return find_with_status("status: [~]") or find_with_status("status: [ ]") or "(none found)"
+
+
+def render_progress_block(counts: dict, current: str) -> str:
+    """Build the auto-managed progress block for the top of tasks.md."""
+    done = counts["done"]
+    in_prog = counts["in_progress"]
+    pending = counts["pending"]
+    blocked = counts["blocked"]
+    total = done + in_prog + pending + blocked
+
+    pct = int(round(100 * done / total)) if total else 0
+    filled = int(round(PROGRESS_BAR_WIDTH * done / total)) if total else 0
+    bar = "█" * filled + "░" * (PROGRESS_BAR_WIDTH - filled)
+    updated = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    return "\n".join([
+        PROGRESS_START,
+        "## Progress",
+        "",
+        f"`{bar}` {pct}% ({done}/{total})",
+        "",
+        f"- ✅ {done} done · 🔄 {in_prog} in progress · ⏳ {pending} pending · 🚧 {blocked} blocked",
+        f"- current: {current}",
+        f"- updated: {updated}",
+        "",
+        PROGRESS_END,
+    ])
+
+
+def update_tasks_progress(change_dir: Path, counts: dict, current: str) -> None:
+    """Inject or replace the progress block in tasks.md (idempotent, no-op on errors)."""
+    tasks_file = change_dir / "tasks.md"
+    if not tasks_file.exists():
+        return
+
+    try:
+        text = tasks_file.read_text()
+    except OSError:
+        return
+
+    block = render_progress_block(counts, current)
+
+    if PROGRESS_START in text and PROGRESS_END in text:
+        before, _, rest = text.partition(PROGRESS_START)
+        _, _, after = rest.partition(PROGRESS_END)
+        new_text = before + block + after
+    else:
+        # First run: inject after the H1, replacing any legacy `## Metadata` block.
+        lines = text.splitlines(keepends=True)
+        h1_idx = next((i for i, l in enumerate(lines) if l.startswith("# ")), -1)
+        if h1_idx == -1:
+            return
+        insert_idx = h1_idx + 1
+        while insert_idx < len(lines) and lines[insert_idx].strip() == "":
+            insert_idx += 1
+        if insert_idx < len(lines) and lines[insert_idx].lstrip().startswith("## Metadata"):
+            end_idx = next(
+                (i for i in range(insert_idx + 1, len(lines)) if lines[i].startswith("## ")),
+                len(lines),
+            )
+        else:
+            end_idx = insert_idx
+        new_text = "".join(lines[:insert_idx]) + block + "\n\n" + "".join(lines[end_idx:])
+
+    if new_text != text:
+        tasks_file.write_text(new_text)
 
 
 # ── Execution ────────────────────────────────────────────────────────────────
@@ -329,8 +401,10 @@ def main():
 
     if args.dry_run:
         counts = count_tasks(change_dir)
+        current = current_or_next_task(change_dir)
+        update_tasks_progress(change_dir, counts, current)
         print(f"\n  [dry-run] Would execute {counts['pending']} pending tasks")
-        print(f"  Next: {next_task_name(change_dir)}")
+        print(f"  Next: {current}")
         sys.exit(0)
 
     # Persistent log for this run — assistant text only (parsed from stream-json).
@@ -363,18 +437,24 @@ def main():
             break
 
         counts = count_tasks(change_dir)
+        current = current_or_next_task(change_dir)
+        update_tasks_progress(change_dir, counts, current)
 
         if counts["pending"] == 0 and counts["in_progress"] == 0:
             print_final(counts, "no pending tasks remain")
             break
 
         print_header(iteration, args.max_iterations, change_id, counts)
-        print(f"  📌 Next: {next_task_name(change_dir)}")
+        print(f"  📌 Next: {current}")
         print(f"  🤖 Launching Claude (timeout: {args.timeout}s)...")
 
         # Run Claude
         exit_code, elapsed, usage, hit_rate_limit = run_claude(args.timeout, log_path)
         print_result(exit_code, elapsed)
+
+        # Refresh progress block to reflect whatever the agent changed.
+        post_counts = count_tasks(change_dir)
+        update_tasks_progress(change_dir, post_counts, current_or_next_task(change_dir))
 
         if usage:
             tin = usage.get("input_tokens")
@@ -382,16 +462,14 @@ def main():
             print(f"  🔢 tokens_in={tin} tokens_out={tout}")
 
         if hit_rate_limit:
-            counts = count_tasks(change_dir)
-            print_final(counts, "rate limit hit — stopping (check log for reset time)")
+            print_final(post_counts, "rate limit hit — stopping (check log for reset time)")
             sys.exit(2)
 
         # Track consecutive failures
         if exit_code != 0:
             consecutive_failures += 1
             if consecutive_failures >= max_consecutive_failures:
-                counts = count_tasks(change_dir)
-                print_final(counts, f"{max_consecutive_failures} consecutive failures — stopping")
+                print_final(post_counts, f"{max_consecutive_failures} consecutive failures — stopping")
                 sys.exit(1)
         else:
             consecutive_failures = 0
