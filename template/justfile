@@ -142,9 +142,6 @@ forge *args:
 forge-status *args:
     python forge/forge_run.py --dry-run {{args}}
 
-# FORGE: Bootstrap empty scaffold (low-level — prefer forge-plan for intelligent planning)
-forge-new change_id *args:
-    python forge/forge_new.py {{change_id}} {{args}}
 
 # Generate or update Obsidian vault from FORGE documents
 vault output_path=".forge-vault" *args:

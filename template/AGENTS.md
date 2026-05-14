@@ -7,12 +7,14 @@ This project is an AI-agent-optimized monorepo. Follow these rules strictly.
 For features that span multiple files or require planning, use the **FORGE protocol**:
 
 ```bash
-# 1. Create a new change
-just forge-new add-notifications --description "Email notifications for item comments"
+# 1. Plan — the agent reads architecture + constraints and writes the full spec
+just forge-plan add-notifications "Email notifications for item comments"
 
-# 2. Fill out spec.md and tasks.md (or ask agent to help)
+# 2. Review the generated spec.md + tasks.md
+just forge-review
 
-# 3. Update state.json phase to "EXECUTE" when ready
+# 3. Approve (transitions REVIEW → EXECUTE and sets the first task)
+just forge-approve
 
 # 4. Run autonomous execution
 just forge                    # Run until done
