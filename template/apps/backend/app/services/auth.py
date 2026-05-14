@@ -1,4 +1,4 @@
-{% raw %}
+{% raw -%}
 import structlog
 
 from app.auth import create_access_token, hash_password, verify_password

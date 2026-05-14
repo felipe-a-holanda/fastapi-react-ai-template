@@ -1,4 +1,4 @@
-{% raw %}
+{% raw -%}
 import asyncio
 from logging.config import fileConfig
 

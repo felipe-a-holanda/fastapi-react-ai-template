@@ -1,4 +1,4 @@
-{% raw %}
+{% raw -%}
 from datetime import UTC, datetime, timedelta
 
 from jose import JWTError, jwt

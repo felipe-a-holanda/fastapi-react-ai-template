@@ -16,21 +16,21 @@ from pathlib import Path
 
 def create_change(change_id: str, description: str = "") -> None:
     """Create a new FORGE change directory with template files."""
-    
+
     # Validate change_id
     if not change_id.replace("-", "").replace("_", "").isalnum():
         print(f"❌ Invalid change ID: {change_id}")
         print("   Use kebab-case (e.g., add-notifications, fix-payment-flow)")
         sys.exit(1)
-    
+
     # Create directory
     change_dir = Path("forge/changes") / change_id
     if change_dir.exists():
         print(f"❌ Change already exists: {change_dir}")
         sys.exit(1)
-    
+
     change_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Create spec.md
     spec_content = f"""# {change_id} — {description or "TODO: Add description"}
 
@@ -81,9 +81,9 @@ Failure:  400 {% raw %}{{ "detail": "Validation error" }}{% endraw %}
 
 - TODO: Things the human must decide before execution
 """
-    
+
     (change_dir / "spec.md").write_text(spec_content)
-    
+
     # Create tasks.md
     tasks_content = f"""# Tasks — {change_id}
 
@@ -131,9 +131,9 @@ TODO: Detailed description.
 
 ---
 """
-    
+
     (change_dir / "tasks.md").write_text(tasks_content)
-    
+
     # Create decisions.md
     decisions_content = f"""# Decisions — {change_id}
 
@@ -154,9 +154,9 @@ TODO: Detailed description.
 
 (Decisions will be logged here during execution)
 """
-    
+
     (change_dir / "decisions.md").write_text(decisions_content)
-    
+
     # Create state.json
     state = {
         "change_id": change_id,
@@ -168,9 +168,9 @@ TODO: Detailed description.
         "verification_failures": 0,
         "max_verification_retries": 3
     }
-    
+
     (change_dir / "state.json").write_text(json.dumps(state, indent=2) + "\n")
-    
+
     # Success message
     print(f"✓ Created FORGE change: {change_dir}")
     print()
@@ -195,21 +195,21 @@ Examples:
   python forge/forge_new.py add-notifications --description "Email notifications for item comments"
         """
     )
-    
+
     parser.add_argument(
         "change_id",
         help="Change ID in kebab-case (e.g., add-notifications, fix-payment-flow)"
     )
-    
+
     parser.add_argument(
         "--description",
         "-d",
         default="",
         help="Short description of the change"
     )
-    
+
     args = parser.parse_args()
-    
+
     create_change(args.change_id, args.description)
 
 

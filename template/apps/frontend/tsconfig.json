@@ -1,4 +1,4 @@
-{% raw %}
+{% raw -%}
 {
   "compilerOptions": {
     "target": "ES2017",

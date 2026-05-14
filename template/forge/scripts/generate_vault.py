@@ -577,7 +577,7 @@ generated: {datetime.now(timezone.utc).isoformat()}
 ### Execute Phase
 
 ```dataview
-TABLE 
+TABLE
   total_tasks as "Tasks",
   completed as "Done",
   pending as "Pending",
@@ -616,7 +616,7 @@ LIMIT 10
 ## Task Status Overview
 
 ```dataview
-TABLE 
+TABLE
   change_id as "Change",
   phase as "Phase",
   completed as "✅",
@@ -694,6 +694,7 @@ SORT phase ASC, change_id ASC
         """Create Obsidian templates if missing."""
         print("\n📝 Creating templates...")
 
+        {% raw -%}
         templates = {
             "manual-note.md": """---
 type: manual-note
@@ -710,7 +711,7 @@ created: {{date}}
 type: meeting-note
 tags: [custom, meeting]
 created: {{date}}
-related_change: 
+related_change:
 ---
 
 # Meeting: {{title}}
@@ -721,12 +722,13 @@ related_change:
 
 ## Action Items
 
-- [ ] 
+- [ ]
 
 ## Related
 
 """
         }
+        {% endraw %}
 
         for name, content in templates.items():
             path = self.output_path / "_templates" / name

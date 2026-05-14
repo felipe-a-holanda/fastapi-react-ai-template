@@ -1,4 +1,4 @@
-{% raw %}
+{% raw -%}
 "use client";
 
 import { useCurrentUser, useLogout } from "@/features/auth/api";

@@ -9,6 +9,6 @@ RUN uv pip install --system -e .
 
 COPY . .
 
-{% raw %}
+{% raw -%}
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 {% endraw %}

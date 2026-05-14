@@ -8,6 +8,6 @@ RUN corepack enable && pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm build
 
-{% raw %}
+{% raw -%}
 CMD ["pnpm", "start"]
 {% endraw %}

@@ -1,4 +1,4 @@
-{% raw %}
+{% raw -%}
 services:
   db:
     image: postgres:16

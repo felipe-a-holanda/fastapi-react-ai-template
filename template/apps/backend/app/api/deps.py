@@ -1,4 +1,4 @@
-{% raw %}
+{% raw -%}
 from collections.abc import AsyncGenerator
 
 from fastapi import Cookie, Depends
@@ -25,6 +25,7 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 # --- Auth dependencies ---
+
 
 def get_user_repository(session: AsyncSession = Depends(get_session)) -> UserRepository:
     return UserRepository(session)
@@ -60,6 +61,7 @@ async def get_current_superuser(
 
 
 # --- Item dependencies (now require auth) ---
+
 
 def get_item_repository(session: AsyncSession = Depends(get_session)) -> ItemRepository:
     return ItemRepository(session)

@@ -1,4 +1,4 @@
-{% raw %}
+{% raw -%}
 import pytest
 from httpx import AsyncClient
 
@@ -11,9 +11,7 @@ async def test_items_require_auth(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_create_item(authenticated_client: AsyncClient):
-    response = await authenticated_client.post(
-        "/api/items/", json={"title": "Test item"}
-    )
+    response = await authenticated_client.post("/api/items/", json={"title": "Test item"})
     assert response.status_code == 201
     data = response.json()
     assert data["title"] == "Test item"
@@ -54,13 +52,9 @@ async def test_get_item_not_found(authenticated_client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_update_item(authenticated_client: AsyncClient):
-    create = await authenticated_client.post(
-        "/api/items/", json={"title": "Original"}
-    )
+    create = await authenticated_client.post("/api/items/", json={"title": "Original"})
     item_id = create.json()["id"]
-    response = await authenticated_client.put(
-        f"/api/items/{item_id}", json={"title": "Updated"}
-    )
+    response = await authenticated_client.put(f"/api/items/{item_id}", json={"title": "Updated"})
     assert response.status_code == 200
     assert response.json()["title"] == "Updated"
 
@@ -73,9 +67,7 @@ async def test_update_item_not_found(authenticated_client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_delete_item(authenticated_client: AsyncClient):
-    create = await authenticated_client.post(
-        "/api/items/", json={"title": "To delete"}
-    )
+    create = await authenticated_client.post("/api/items/", json={"title": "To delete"})
     item_id = create.json()["id"]
     response = await authenticated_client.delete(f"/api/items/{item_id}")
     assert response.status_code == 204
@@ -102,9 +94,7 @@ async def test_user_isolation(client: AsyncClient):
         json={"email": "a@test.com", "password": "testpass123"},
     )
     cookies_a = dict(resp_a.cookies)
-    await client.post(
-        "/api/items/", json={"title": "A's item"}, cookies=cookies_a
-    )
+    await client.post("/api/items/", json={"title": "A's item"}, cookies=cookies_a)
 
     # User B
     await client.post(

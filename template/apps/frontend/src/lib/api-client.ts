@@ -1,4 +1,4 @@
-{% raw %}
+{% raw -%}
 // This file wraps the generated OpenAPI types with typed fetch functions.
 // After running `just generate-client`, the types in packages/client/src/types.ts
 // are the source of truth for all API shapes.

@@ -1,4 +1,4 @@
-{% raw %}
+{% raw -%}
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

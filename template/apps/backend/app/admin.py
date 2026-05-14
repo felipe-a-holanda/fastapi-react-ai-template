@@ -1,4 +1,4 @@
-{% raw %}
+{% raw -%}
 from sqladmin import Admin, ModelView
 from sqladmin.authentication import AuthenticationBackend
 from starlette.requests import Request
@@ -18,6 +18,7 @@ class AdminAuth(AuthenticationBackend):
 
         async with async_session_maker() as session:
             from sqlalchemy import select
+
             result = await session.execute(select(User).where(User.email == email))
             user = result.scalar_one_or_none()
 

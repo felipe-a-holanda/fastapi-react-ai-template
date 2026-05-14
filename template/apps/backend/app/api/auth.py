@@ -1,4 +1,4 @@
-{% raw %}
+{% raw -%}
 from fastapi import APIRouter, Depends, Response
 
 from app.api.deps import get_auth_service, get_current_user

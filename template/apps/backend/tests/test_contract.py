@@ -1,15 +1,16 @@
-{% raw %}
+{% raw -%}
 """
 Contract tests: validate backend responses against openapi.yaml.
 
 This ensures the OpenAPI spec (source of truth) and the actual API
 stay in sync. Catches drift that type generation alone misses.
 """
-import pytest
-from httpx import AsyncClient
 
-import yaml
 from pathlib import Path
+
+import pytest
+import yaml
+from httpx import AsyncClient
 
 SPEC_PATH = Path(__file__).resolve().parents[3] / "packages" / "contracts" / "openapi.yaml"
 
@@ -29,9 +30,7 @@ def get_schema_fields(spec: dict, schema_name: str) -> set[str]:
 async def test_item_response_matches_spec(client: AsyncClient, openapi_spec: dict):
     """Verify that a created item contains all fields from the Item schema."""
     cookies = await _auth(client)
-    response = await client.post(
-        "/api/items/", json={"title": "Contract test"}, cookies=cookies
-    )
+    response = await client.post("/api/items/", json={"title": "Contract test"}, cookies=cookies)
     assert response.status_code == 201
 
     expected_fields = get_schema_fields(openapi_spec, "Item")

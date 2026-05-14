@@ -1,4 +1,4 @@
-{% raw %}
+{% raw -%}
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { itemsApi, type ItemCreate, type ItemUpdate } from "@/lib/api-client";
 

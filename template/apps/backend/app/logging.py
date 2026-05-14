@@ -1,4 +1,4 @@
-{% raw %}
+{% raw -%}
 import logging
 import sys
 

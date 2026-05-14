@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   title: "{{ project_name }}",
 };
 
-{% raw %}
+{% raw -%}
 export default function RootLayout({
   children,
 }: {

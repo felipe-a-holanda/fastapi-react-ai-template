@@ -1,5 +1,6 @@
-{% raw %}
+{% raw -%}
 """Unit tests for auth utilities and exception handling."""
+
 import json
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
@@ -15,8 +16,7 @@ from app.auth import (
     verify_password,
 )
 from app.config import settings
-from app.exceptions import AppError, NotFoundError, ValidationError, app_exception_handler
-
+from app.exceptions import NotFoundError, ValidationError, app_exception_handler
 
 # --- Password hashing ---
 

@@ -1,4 +1,4 @@
-{% raw %}
+{% raw -%}
 """
 Seed the database with an admin user and sample items.
 Run with: just seed
@@ -61,9 +61,7 @@ async def seed():
 
     async with async_session_maker() as session:
         # Create admin user if not exists
-        result = await session.execute(
-            select(User).where(User.email == settings.admin_email)
-        )
+        result = await session.execute(select(User).where(User.email == settings.admin_email))
         admin = result.scalar_one_or_none()
 
         if not admin:

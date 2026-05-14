@@ -1,4 +1,4 @@
-{% raw %}
+{% raw -%}
 import os
 
 # Set DATABASE_URL before app modules are imported.

@@ -1,4 +1,4 @@
-{% raw %}
+{% raw -%}
 import { z } from "zod";
 
 export const itemCreateSchema = z.object({

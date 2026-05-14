@@ -1,4 +1,4 @@
-{% raw %}
+{% raw -%}
 "use client";
 
 import { useItems, useDeleteItem, useUpdateItem } from "./api";

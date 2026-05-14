@@ -1,17 +1,16 @@
-{% raw %}
+{% raw -%}
 """Direct unit tests for service and repository layers."""
+
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth import hash_password
 from app.exceptions import (
     AuthenticationError,
     AuthorizationError,
     ConflictError,
     NotFoundError,
 )
-
-from app.auth import hash_password
-from app.models.item import Item
 from app.models.user import User
 from app.repositories.item import ItemRepository
 from app.repositories.user import UserRepository
@@ -19,7 +18,6 @@ from app.schemas.item import ItemCreate, ItemUpdate
 from app.schemas.user import UserCreate
 from app.services.auth import AuthService
 from app.services.item import ItemService
-
 
 # ---------------------------------------------------------------------------
 # UserRepository
@@ -116,9 +114,7 @@ async def test_item_repo_delete(session: AsyncSession, test_user: User):
 async def test_auth_service_register(session: AsyncSession):
     repo = UserRepository(session)
     service = AuthService(repo)
-    result = await service.register(
-        UserCreate(email="svc@test.com", password="password123")
-    )
+    result = await service.register(UserCreate(email="svc@test.com", password="password123"))
     assert result.email == "svc@test.com"
 
 
@@ -227,9 +223,7 @@ async def test_item_service_update(session: AsyncSession, test_user: User):
     repo = ItemRepository(session)
     service = ItemService(repo)
     created = await service.create_item(ItemCreate(title="Old"), owner_id=test_user.id)
-    updated = await service.update_item(
-        created.id, ItemUpdate(title="New"), owner_id=test_user.id
-    )
+    updated = await service.update_item(created.id, ItemUpdate(title="New"), owner_id=test_user.id)
     assert updated.title == "New"
 
 

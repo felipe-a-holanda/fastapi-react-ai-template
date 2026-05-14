@@ -3,6 +3,18 @@ _templates_suffix: ""
 _skip_if_exists:
   - .env
 
+# Jinja env tweaks so generated files are clean for pre-commit:
+# - trim_blocks: consume the newline after `%}` so wrapper lines (e.g.
+#   `{% endraw %}` at EOF) don't leak a trailing blank line.
+# - lstrip_blocks: strip leading whitespace before a `{% ... %}` on its own
+#   line so we can indent wrapper tags to match surrounding code.
+# Wrapped templates use `{% raw -%}` (note the `-`) because trim_blocks does
+# not strip the newline after `{% raw %}` itself — raw is consumed by the
+# lexer before trim_blocks applies.
+_envops:
+  trim_blocks: true
+  lstrip_blocks: true
+
 project_name:
   type: str
   help: "Project name (e.g. 'My SaaS App')"
@@ -40,4 +52,4 @@ _tasks:
   - ["git", "init"]
   - ["git", "add", "."]
   - ["just", "install"]
-  - ["pre-commit", "install"]
+  - ["uvx", "pre-commit", "install"]

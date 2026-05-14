@@ -1,4 +1,4 @@
-{% raw %}
+{% raw -%}
 module.exports = {
   plugins: {
     tailwindcss: {},

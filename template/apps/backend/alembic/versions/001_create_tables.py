@@ -1,4 +1,4 @@
-{% raw %}
+{% raw -%}
 """create users and items tables
 
 Revision ID: 001

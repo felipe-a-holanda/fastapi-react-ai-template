@@ -120,7 +120,7 @@ Nodes are color-coded by phase:
 The Phase Dashboard includes dynamic queries:
 
 ```dataview
-TABLE 
+TABLE
   total_tasks as "Tasks",
   completed as "Done",
   pending as "Pending",
@@ -211,8 +211,8 @@ Add CSS snippets to `.obsidian/snippets/`:
 
 ```css
 /* .obsidian/snippets/my-custom.css */
-.graph-view.color-fill[data-tag*="custom"] { 
-  fill: #ff00ff; 
+.graph-view.color-fill[data-tag*="custom"] {
+  fill: #ff00ff;
 }
 ```
 
@@ -276,12 +276,12 @@ The script is organized into methods:
 
 ## Benefits
 
-✅ **Zero agent impact** - FORGE structure unchanged, agent performance unaffected  
-✅ **Full Obsidian features** - Graph view, backlinks, dataview, canvas  
-✅ **Always in sync** - Regenerate anytime to update vault with latest FORGE state  
-✅ **Safe updates** - Smart merge preserves manual additions  
-✅ **Flexible output** - Generate vault anywhere (local, Dropbox, iCloud)  
-✅ **Easy workflow** - Simple `just vault` command  
+✅ **Zero agent impact** - FORGE structure unchanged, agent performance unaffected
+✅ **Full Obsidian features** - Graph view, backlinks, dataview, canvas
+✅ **Always in sync** - Regenerate anytime to update vault with latest FORGE state
+✅ **Safe updates** - Smart merge preserves manual additions
+✅ **Flexible output** - Generate vault anywhere (local, Dropbox, iCloud)
+✅ **Easy workflow** - Simple `just vault` command
 
 ## See Also
 

@@ -1,4 +1,4 @@
-{% raw %}
+{% raw -%}
 import structlog
 
 from app.exceptions import NotFoundError
@@ -29,9 +29,7 @@ class ItemService:
         logger.info("item_created", item_id=item.id, owner_id=owner_id)
         return ItemResponse.model_validate(item)
 
-    async def update_item(
-        self, item_id: int, data: ItemUpdate, owner_id: int
-    ) -> ItemResponse:
+    async def update_item(self, item_id: int, data: ItemUpdate, owner_id: int) -> ItemResponse:
         item = await self.repository.get_by_id(item_id, owner_id=owner_id)
         if not item:
             raise NotFoundError(f"Item {item_id} not found")
