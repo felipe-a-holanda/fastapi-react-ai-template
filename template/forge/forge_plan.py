@@ -2,8 +2,11 @@
 """
 forge_plan.py — FORGE PLAN phase: invoke Claude to produce a complete spec + task breakdown.
 
-Claude is required to read global architecture, constraints, and verification docs before
-writing anything. After this command, the change is in REVIEW phase and ready for human approval.
+The prompt template lives in `forge/PLAN_PROMPT.md` (one source of truth, also used by
+the `forge-plan` skill). This script substitutes the variables and feeds the result to
+`claude -p`, streaming progress events live.
+
+After this command, the change is in REVIEW phase and ready for human approval.
 
 Usage:
     python forge/forge_plan.py <change-id> "<short description>"
@@ -13,65 +16,39 @@ Usage:
 
 import argparse
 import json
+import string
 import subprocess
 import sys
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 
 FORGE_DIR = Path("forge")
 CHANGES_DIR = FORGE_DIR / "changes"
+PROMPT_FILE = FORGE_DIR / "PLAN_PROMPT.md"
 CLAUDE_CMD = "claude"
 
-PLAN_PROMPT_TEMPLATE = """\
-You are starting the FORGE PLAN phase.
+HEARTBEAT_INTERVAL = 30  # seconds between "still running…" pings if no output
 
-Change ID: {change_id}
 
-Feature request{source_label}:
----
-{description}
----
-{source_note}
+def load_prompt_template() -> str:
+    """Read the prompt template from PLAN_PROMPT.md.
 
-MANDATORY — read ALL of these files before writing anything:
-1. AGENTS.md
-2. forge/global/architecture.md
-3. forge/global/constraints.md
-4. forge/global/verification.md
-5. forge/CLAUDE.md  (for the full PLAN phase protocol and adversarial checklist)
-
-After reading, create the following files in forge/changes/{change_id}/:
-
-spec.md — complete spec with:
-  - Goal: one paragraph, what and for whom
-  - Non-Goals: what this explicitly does NOT do
-  - Does Not Touch: explicit list of modules, files, and domains this change must NOT modify
-  - Requirements: numbered, each must be testable
-  - Constraints: feature-specific (beyond global constraints already in forge/global/constraints.md)
-  - Invariants: domain rules the implementation must respect (e.g. "items MUST always have an owner_id"). Omit only if the feature introduces no domain rules worth enforcing.
-  - Edge Cases: known edge cases and expected behavior
-  - Inputs/Outputs: API endpoints (request/response), DB schema changes (SQL), UI states as applicable
-  - Open Questions: anything the human must decide before execution
-
-tasks.md — ordered atomic tasks following the AGENTS.md feature-addition checklist:
-  openapi.yaml → generate-client → backend (model→schema→repo→service→router→deps.py wiring)
-  → migration → frontend (hooks→schema→components) → tests (pytest + Vitest)
-  Each task must have: status [ ], touches, depends, verify, notes fields.
-
-decisions.md — empty log with the standard header only.
-
-state.json — set to:
-  {% raw %}{{ "change_id": "{change_id}", "phase": "REVIEW", "current_task": null, "iteration": 0,
-     "previous_phase": "PLAN", "last_updated": "<ISO timestamp>",
-     "verification_failures": 0, "max_verification_retries": 3 }}{% endraw %}
-
-Before finalizing, run the adversarial checklist from forge/CLAUDE.md against your own spec.
-Answer every item — "N/A" is valid, skipping is not.
-Verify every requirement has at least one task covering it.
-
-When done, print a brief summary: goal, number of tasks, any open questions.
-"""
+    The file contains a documentation header followed by '---' on its own line,
+    then the actual prompt. Only the part after the first standalone '---' is
+    returned (the header is for human readers and the skill, not the LLM).
+    """
+    if not PROMPT_FILE.is_file():
+        print(f"❌ Missing prompt template: {PROMPT_FILE}")
+        sys.exit(1)
+    raw = PROMPT_FILE.read_text()
+    # Split on the first '---' that sits on its own line.
+    parts = raw.split("\n---\n", 1)
+    if len(parts) != 2:
+        print(f"❌ {PROMPT_FILE} is missing the '---' separator between header and prompt.")
+        sys.exit(1)
+    return parts[1].lstrip("\n")
 
 
 def create_change_dir(change_id: str) -> Path:
@@ -107,6 +84,67 @@ def create_change_dir(change_id: str) -> Path:
     return change_dir
 
 
+# ── Stream-json rendering ────────────────────────────────────────────────────
+
+
+def _fmt_size(n: int) -> str:
+    if n >= 1024:
+        return f"{n / 1024:.1f}KB"
+    return f"{n}B"
+
+
+def _summarize_tool_input(name: str, inp: dict) -> str:
+    if name in ("Read", "Edit"):
+        path = inp.get("file_path", "?")
+        return str(path).replace(str(Path.cwd()) + "/", "")
+    if name == "Write":
+        path = inp.get("file_path", "?")
+        size = len(inp.get("content", "") or "")
+        rel = str(path).replace(str(Path.cwd()) + "/", "")
+        return f"{rel} ({_fmt_size(size)})"
+    if name == "Bash":
+        cmd = (inp.get("command") or "").splitlines()[0] if inp.get("command") else ""
+        return cmd[:100]
+    if name == "Glob":
+        return inp.get("pattern", "?")
+    if name == "Grep":
+        return inp.get("pattern", "?")
+    if name == "TodoWrite":
+        todos = inp.get("todos") or []
+        return f"{len(todos)} todo(s)"
+    # Generic fallback — first one or two short fields.
+    bits = []
+    for k, v in list(inp.items())[:2]:
+        sv = str(v)
+        if len(sv) > 60:
+            sv = sv[:57] + "…"
+        bits.append(f"{k}={sv}")
+    return ", ".join(bits)
+
+
+def _render_event(event: dict, *, start: float) -> None:
+    """Print a single one-line summary for an interesting stream-json event."""
+    et = event.get("type")
+    if et == "assistant":
+        msg = event.get("message") or {}
+        for block in msg.get("content") or []:
+            bt = block.get("type")
+            if bt == "tool_use":
+                name = block.get("name", "?")
+                summary = _summarize_tool_input(name, block.get("input") or {})
+                elapsed = int(time.monotonic() - start)
+                mins, secs = divmod(elapsed, 60)
+                print(f"  [{mins:02d}:{secs:02d}] {name:<10} {summary}", flush=True)
+            elif bt == "text":
+                text = (block.get("text") or "").strip()
+                if text:
+                    first = text.splitlines()[0][:140]
+                    print(f"         · {first}", flush=True)
+    elif et == "result":
+        # Final summary handled by caller (so we can show cost/turns alongside time).
+        pass
+
+
 def run_claude_plan(
     change_id: str,
     description: str,
@@ -114,7 +152,9 @@ def run_claude_plan(
     timeout: int,
     source_path: Path | None = None,
 ) -> int:
-    """Invoke Claude Code with the planning prompt. Returns exit code."""
+    """Invoke Claude Code with the planning prompt, streaming events. Returns exit code."""
+    template = load_prompt_template()
+
     if source_path is not None:
         source_label = f" (sourced from {source_path})"
         source_note = (
@@ -127,48 +167,106 @@ def run_claude_plan(
         source_label = ""
         source_note = ""
 
-    prompt = PLAN_PROMPT_TEMPLATE.format(
+    prompt = string.Template(template).safe_substitute(
         change_id=change_id,
         description=description,
         source_label=source_label,
         source_note=source_note,
     )
 
-    print(f"\n🤖 Invoking Claude (max-turns: {max_turns}, timeout: {timeout}s)...")
-    print("   Claude will read global architecture docs and produce the spec.\n")
+    print(f"\n🤖 Invoking Claude (max-turns: {max_turns}, timeout: {timeout}s)")
+    print("   Streaming progress (elapsed mm:ss):\n")
 
     start = time.monotonic()
     try:
-        result = subprocess.run(
+        proc = subprocess.Popen(
             [
                 CLAUDE_CMD,
                 "--dangerously-skip-permissions",
                 "--max-turns", str(max_turns),
+                "--output-format", "stream-json",
                 "--verbose",
                 "-p", prompt,
             ],
-            timeout=timeout,
-            capture_output=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             stdin=subprocess.DEVNULL,
+            text=True,
+            bufsize=1,
         )
-        elapsed = time.monotonic() - start
-        mins, secs = divmod(int(elapsed), 60)
-        time_str = f"{mins}m{secs}s" if mins else f"{secs}s"
-
-        if result.returncode == 0:
-            print(f"\n✔  Claude finished in {time_str}")
-        else:
-            print(f"\n⚠  Claude exited with code {result.returncode} after {time_str}")
-
-        return result.returncode
-
-    except subprocess.TimeoutExpired:
-        elapsed = time.monotonic() - start
-        print(f"\n⚠  Timeout after {int(elapsed)}s — Claude was killed")
-        return 124
     except FileNotFoundError:
         print(f"\n✗ '{CLAUDE_CMD}' not found. Is Claude Code installed and in PATH?")
         sys.exit(1)
+
+    stop_event = threading.Event()
+    timed_out = threading.Event()
+
+    def heartbeat() -> None:
+        while not stop_event.wait(HEARTBEAT_INTERVAL):
+            elapsed = int(time.monotonic() - start)
+            mins, secs = divmod(elapsed, 60)
+            print(
+                f"  ⏳ still running… {mins}m{secs}s elapsed (timeout at {timeout}s)",
+                file=sys.stderr, flush=True,
+            )
+
+    def watchdog() -> None:
+        if not stop_event.wait(timeout):
+            timed_out.set()
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
+
+    hb = threading.Thread(target=heartbeat, daemon=True)
+    wd = threading.Thread(target=watchdog, daemon=True)
+    hb.start()
+    wd.start()
+
+    final_event: dict | None = None
+    try:
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            line = line.rstrip("\n")
+            if not line:
+                continue
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                # Non-JSON line (shouldn't happen in stream-json, but pass through)
+                print(line, flush=True)
+                continue
+            if event.get("type") == "result":
+                final_event = event
+            _render_event(event, start=start)
+    finally:
+        stop_event.set()
+        proc.wait()
+
+    elapsed = time.monotonic() - start
+    mins, secs = divmod(int(elapsed), 60)
+    time_str = f"{mins}m{secs}s" if mins else f"{secs}s"
+
+    if timed_out.is_set():
+        print(f"\n⚠  Timeout after {int(elapsed)}s — Claude was killed")
+        return 124
+
+    rc = proc.returncode
+    if rc == 0:
+        print(f"\n✔  Claude finished in {time_str}")
+        if final_event:
+            cost = final_event.get("total_cost_usd")
+            turns = final_event.get("num_turns")
+            if cost is not None or turns is not None:
+                bits = []
+                if turns is not None:
+                    bits.append(f"turns: {turns}")
+                if cost is not None:
+                    bits.append(f"cost: ${cost:.3f}")
+                print("   " + ", ".join(bits))
+    else:
+        print(f"\n⚠  Claude exited with code {rc} after {time_str}")
+    return rc
 
 
 def print_next_steps(change_id: str, change_dir: Path) -> None:
