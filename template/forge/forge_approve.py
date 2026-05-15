@@ -14,6 +14,7 @@ Usage:
 import argparse
 import json
 import re
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -76,6 +77,49 @@ def count_tasks(change_dir: Path) -> dict[str, int]:
     }
 
 
+def tag_spec_approved(change_id: str) -> str | None:
+    """Create an annotated git tag marking the spec-approved point.
+
+    Returns the tag name on success, None if skipped/failed (non-fatal).
+    """
+    tag = f"forge/{change_id}/spec-approved"
+    try:
+        in_repo = subprocess.run(
+            ["git", "rev-parse", "--is-inside-work-tree"],
+            capture_output=True,
+            text=True,
+        )
+        if in_repo.returncode != 0 or in_repo.stdout.strip() != "true":
+            return None
+
+        exists = subprocess.run(
+            ["git", "rev-parse", "--verify", "--quiet", f"refs/tags/{tag}"],
+            capture_output=True,
+        )
+        if exists.returncode == 0:
+            print(f"   tag:          {tag} (already exists, skipped)")
+            return None
+
+        result = subprocess.run(
+            [
+                "git",
+                "tag",
+                "-a",
+                tag,
+                "-m",
+                f"FORGE: spec approved for {change_id} — EXECUTE phase begins",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            print(f"   tag:          failed ({result.stderr.strip() or 'unknown error'})")
+            return None
+        return tag
+    except FileNotFoundError:
+        return None
+
+
 def approve(change_dir: Path, state: dict) -> None:
     change_id = state.get("change_id", change_dir.name)
 
@@ -103,6 +147,10 @@ def approve(change_dir: Path, state: dict) -> None:
     print(f"   change:       {change_id}")
     print(f"   first task:   {first_task}")
     print(f"   total tasks:  {counts.get('pending', 0)} pending, {counts.get('done', 0)} done")
+
+    created_tag = tag_spec_approved(change_id)
+    if created_tag:
+        print(f"   tag:          {created_tag}")
     print()
     print("  Run the autonomous execution loop:")
     print("    just forge")
