@@ -415,9 +415,8 @@ def main():
                 print(f"  🔢 tokens_in={tin} tokens_out={tout}")
 
         if result.hit_rate_limit:
-            print_final(
-                post_counts, "rate limit hit — stopping (check log for reset time)"
-            )
+            msg = result.rate_limit_message or "check log for reset time"
+            print_final(post_counts, f"rate limit hit — stopping ({msg})")
             sys.exit(2)
 
         # Track consecutive failures

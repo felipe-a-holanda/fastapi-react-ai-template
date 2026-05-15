@@ -43,6 +43,7 @@ class AgentResult:
     elapsed: float
     usage: dict | None = None
     hit_rate_limit: bool = False
+    rate_limit_message: str | None = None
     final_event: dict | None = None
     timed_out: bool = False
 
@@ -154,15 +155,20 @@ def _extract_text(value) -> str:
         text = value.get(key)
         if isinstance(text, str):
             return text
-    for key in ("item", "event", "data"):
+    for key in ("item", "event", "data", "message"):
         text = _extract_text(value.get(key))
         if text:
             return text
     return ""
 
 
-def render_plan_event(agent: str, event: dict, *, start: float) -> None:
+def render_plan_event(agent: str, event: dict, *, start: float, log_handle: TextIO | None = None) -> None:
     """Print a concise progress line for an agent event."""
+    def _print(msg: str):
+        print(msg, flush=True)
+        if log_handle is not None:
+            log_handle.write(msg + "\n")
+
     if agent == "claude":
         if event.get("type") != "assistant":
             return
@@ -173,20 +179,20 @@ def render_plan_event(agent: str, event: dict, *, start: float) -> None:
                 name = block.get("name", "?")
                 summary = _summarize_tool_input(name, block.get("input") or {})
                 mins, secs = divmod(int(time.monotonic() - start), 60)
-                print(f"  [{mins:02d}:{secs:02d}] {name:<10} {summary}", flush=True)
+                _print(f"  [{mins:02d}:{secs:02d}] {name:<10} {summary}")
             elif bt == "text":
                 text = (block.get("text") or "").strip()
                 if text:
-                    print(f"         · {text.splitlines()[0][:140]}", flush=True)
+                    _print(f"         · {text.splitlines()[0][:140]}")
         return
 
     et = str(event.get("type") or "")
     text = _extract_text(event).strip()
     if text:
-        print(f"         · {text.splitlines()[0][:140]}", flush=True)
+        _print(f"         · {text.splitlines()[0][:140]}")
     elif et:
         mins, secs = divmod(int(time.monotonic() - start), 60)
-        print(f"  [{mins:02d}:{secs:02d}] {et}", flush=True)
+        _print(f"  [{mins:02d}:{secs:02d}] {et}")
 
 
 def _update_result_from_event(agent: str, event: dict, result: AgentResult) -> None:
@@ -298,11 +304,28 @@ def run_agent(
 
             _update_result_from_event(agent, event, result)
             text = _extract_text(event)
-            if text and RATE_LIMIT_NEEDLE in text.lower():
+            # Rate-limit signals: structural fields are checked first because the
+            # text-needle path can miss when the rate-limit string is buried inside
+            # event.message.content[*].text. Any one of these is sufficient.
+            if (
+                event.get("error") == "rate_limit"
+                or event.get("api_error_status") == 429
+                or (text and RATE_LIMIT_NEEDLE in text.lower())
+            ):
                 result.hit_rate_limit = True
+                if not result.rate_limit_message:
+                    result.rate_limit_message = (text.strip().splitlines()[0] if text else "rate_limit")
+                # Stop reading further events — the agent is done and we want to
+                # surface this to forge_run immediately rather than after the
+                # full timeout/heartbeat cycle.
+                try:
+                    proc.kill()
+                except ProcessLookupError:
+                    pass
+                break
 
             if render_plan:
-                render_plan_event(agent, event, start=start)
+                render_plan_event(agent, event, start=start, log_handle=log_handle)
             elif text:
                 sys.stdout.write(text)
                 sys.stdout.flush()
@@ -311,14 +334,25 @@ def run_agent(
     finally:
         stop_event.set()
         proc.wait()
+
+        result.elapsed = time.monotonic() - start
+        result.timed_out = timed_out.is_set()
+        result.exit_code = 124 if timed_out.is_set() else proc.returncode
+
         if log_handle is not None:
+            time_str = _format_elapsed(result.elapsed)
+            status = "TIMEOUT" if result.timed_out else ("SUCCESS" if result.exit_code == 0 else f"FAILED (code {result.exit_code})")
+            tokens_str = ""
+            if result.usage:
+                in_tok = result.usage.get('input_tokens', '?')
+                out_tok = result.usage.get('output_tokens', '?')
+                tokens_str = f" (Tokens: {in_tok} in / {out_tok} out)"
+
+            log_handle.write(f"\n=== iteration ended: {status} in {time_str}{tokens_str} ===\n")
             log_handle.close()
         if jsonl_handle is not None:
             jsonl_handle.close()
 
-    result.elapsed = time.monotonic() - start
-    result.timed_out = timed_out.is_set()
-    result.exit_code = 124 if timed_out.is_set() else proc.returncode
     return result
 
 
