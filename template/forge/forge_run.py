@@ -42,6 +42,16 @@ PROGRESS_START = (
 PROGRESS_END = "<!-- forge:progress:end -->"
 PROGRESS_BAR_WIDTH = 20
 
+_run_started: float | None = None
+
+
+def _format_total(elapsed: float) -> str:
+    hours, rem = divmod(int(elapsed), 3600)
+    mins, secs = divmod(rem, 60)
+    if hours:
+        return f"{hours}h{mins:02d}m{secs:02d}s"
+    return f"{mins}m{secs:02d}s"
+
 PROMPT = (
     "Read forge/AGENTS.md (bootstrap), AGENTS.md, and the active change's "
     "spec.md / tasks.md / decisions.md. Execute the next pending task following "
@@ -254,6 +264,8 @@ def print_final(counts: dict, reason: str):
     print(
         f"  ✅ {counts['done']} done · ⏳ {counts['pending']} pending · 🚧 {counts['blocked']} blocked"
     )
+    if _run_started is not None:
+        print(f"  ⏱  total wall-clock: {_format_total(time.monotonic() - _run_started)}")
     print("─" * 60)
 
 
@@ -261,6 +273,8 @@ def print_final(counts: dict, reason: str):
 
 
 def main():
+    global _run_started
+    _run_started = time.monotonic()
     parser = argparse.ArgumentParser(description="FORGE autonomous execution runner")
     parser.add_argument("--max-iterations", type=int, default=100)
     parser.add_argument(
@@ -355,6 +369,7 @@ def main():
         state = load_state(change_dir)
         if not state:
             print("\n  ✗ state.json disappeared. Stopping.")
+            print_final(count_tasks(change_dir), "state.json disappeared")
             break
 
         if state.get("phase") == "DONE":
