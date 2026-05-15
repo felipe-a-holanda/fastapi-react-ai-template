@@ -58,8 +58,8 @@ def find_first_pending_task(change_dir: Path) -> str | None:
         if re.match(r"^### task-\S+", line):
             for j in range(i + 1, min(i + 6, len(lines))):
                 if "status: [ ]" in lines[j]:
-                    # Extract "task-01" from "### task-01: description"
-                    match = re.match(r"^### (task-\S+?)(?::|$)", line)
+                    # Extract "task-01" from "### task-01: desc", "### task-01 — desc", etc.
+                    match = re.match(r"^### (task-\S+?)(?:[\s:]|$)", line)
                     if match:
                         return match.group(1)
     return None
