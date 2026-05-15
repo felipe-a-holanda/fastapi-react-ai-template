@@ -17,6 +17,7 @@ Usage:
 
 import argparse
 import json
+import re
 import string
 import sys
 from datetime import datetime, timezone
@@ -56,6 +57,27 @@ def load_prompt_template() -> str:
         )
         sys.exit(1)
     return parts[1].lstrip("\n")
+
+
+def auto_prefix_change_id(change_id: str) -> str:
+    """If change_id doesn't start with a 4-digit number, prepend the next available number."""
+    if re.match(r"^\d{4}-", change_id):
+        return change_id
+    
+    max_num = 0
+    if CHANGES_DIR.exists():
+        for d in CHANGES_DIR.iterdir():
+            if d.is_dir():
+                match = re.match(r"^(\d{4})-", d.name)
+                if match:
+                    num = int(match.group(1))
+                    if num > max_num:
+                        max_num = num
+                        
+    next_num = max_num + 1
+    new_id = f"{next_num:04d}-{change_id}"
+    print(f"➜ Auto-prefixed change ID: {new_id}")
+    return new_id
 
 
 def create_change_dir(change_id: str) -> Path:
@@ -235,6 +257,7 @@ Examples:
     agent = resolve_agent(args.agent)
     model = resolve_model(agent, "plan", args.model)
 
+    args.change_id = auto_prefix_change_id(args.change_id)
     validate_change_id(args.change_id)
 
     if args.from_file and args.description:
