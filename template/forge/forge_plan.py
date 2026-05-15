@@ -63,7 +63,7 @@ def auto_prefix_change_id(change_id: str) -> str:
     """If change_id doesn't start with a 4-digit number, prepend the next available number."""
     if re.match(r"^\d{4}-", change_id):
         return change_id
-    
+
     max_num = 0
     if CHANGES_DIR.exists():
         for d in CHANGES_DIR.iterdir():
@@ -73,7 +73,7 @@ def auto_prefix_change_id(change_id: str) -> str:
                     num = int(match.group(1))
                     if num > max_num:
                         max_num = num
-                        
+
     next_num = max_num + 1
     new_id = f"{next_num:04d}-{change_id}"
     print(f"➜ Auto-prefixed change ID: {new_id}")
